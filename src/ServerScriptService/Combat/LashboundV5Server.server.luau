@@ -548,9 +548,9 @@ local function swingModel(character,step,mode,whipId)
     local side=(step==2) and -1 or 1
     -- Raise the arm, visibly COIL the lash, then snap toward the target.
     -- The lash whip-tip impact timestamps (.29/.33/.37s) stay server-authoritative.
-    local windup=mode=="Heavy" and .26 or mode=="Power" and .29 or .21
+    local windup=mode=="Heavy" and .26 or mode=="Power" and .40 or .21
     local impactAngle=mode=="Heavy" and 148 or mode=="Power" and 132 or step==3 and 124 or 104
-    local returnTime=mode=="Heavy" and .38 or mode=="Power" and .32 or .27
+    local returnTime=mode=="Heavy" and .38 or mode=="Power" and .42 or .27
     local startYaw=(mode=="Power" and whipId=="Volt") and 20 or 66
     joint.C0=idle*CFrame.Angles(math.rad(-70),math.rad(startYaw*side),math.rad(-35*side))
     local coil=TweenService:Create(joint,TweenInfo.new(windup*.63,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),{
@@ -577,7 +577,7 @@ local function broadcastAction(origin, kind, direction, color, step, whipId, act
     local payload={kind=kind,origin=origin,direction=direction,color=color,step=step,whipId=whipId,actorUserId=actorUserId,startedAt=serverStart or Workspace:GetServerTimeNow()}
     if kind=="Attack" then payload.impactServerTime=payload.startedAt+((hitbox and hitbox.impactAt) or .29)
     elseif kind=="Heavy" then payload.impactServerTime=payload.startedAt+.33
-    elseif kind=="Power" then payload.impactServerTime=payload.startedAt+.37 end
+    elseif kind=="Power" then payload.impactServerTime=payload.startedAt+.52 end
     if hitbox then
         -- Only the server writes combat-range metadata; the client merely draws it.
         payload.hitbox=hitbox
@@ -597,8 +597,7 @@ local function vectorFacing(param,root)
     local flat=Vector3.new(param.X,0,param.Z)
     if flat.Magnitude<.1 or flat.Magnitude>100 then return face.Unit end
     local vec=flat.Unit
-    -- Limited client steering; prevents impossible backwards hits without turning.
-    if vec:Dot(face.Unit)<-.2 then return face.Unit end
+    -- The input ray is player-controlled; accept an otherwise valid 360-degree aim.
     return vec
 end
 local function allTargets(attacker)
@@ -1099,7 +1098,7 @@ local function power(player,root,character,dir)
     player:SetAttribute("WhipWindupAt",os.clock())
     player:SetAttribute("LastCombatAt",os.clock())
     player:SetAttribute("WhipAim",dir)
-    markWhipMotion(character,"Power",3,.65)
+    markWhipMotion(character,"Power",3,.88)
     swingModel(character,3,"Power",id)
     local powerBox=nil
     if id=="Rope" then
@@ -1123,8 +1122,8 @@ local function power(player,root,character,dir)
     end
     broadcastAction(root.Position,"Power",dir,cfg.Color,3,id,player.UserId,powerBox)
     -- Commit the ability on the same synchronized whip-tip snap as the client.
-    -- The marker/pose is the 0.37s windup, not premature damage.
-    task.delay(.37,function()
+    -- The marker/pose follows a heavier 0.52s windup.
+    task.delay(.52,function()
         if player.Parent~=Players or not root.Parent or not isArena(player)
             or os.clock()<(player:GetAttribute("StunnedUntil") or 0) then return end
         local all=allTargets(player)
