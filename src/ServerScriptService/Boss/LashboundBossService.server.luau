@@ -5,6 +5,7 @@ local Players=game:GetService("Players")
 local Workspace=game:GetService("Workspace")
 local RS=game:GetService("ReplicatedStorage")
 local ServerScriptService=game:GetService("ServerScriptService")
+local AttackTimeline=require(ServerScriptService:WaitForChild("Combat"):WaitForChild("AttackTimeline"))
 local Tween=game:GetService("TweenService")
 local Debris=game:GetService("Debris")
 local Feedback=RS:WaitForChild("LashboundV5Remotes"):WaitForChild("Feedback")
@@ -159,7 +160,10 @@ local function prepareAttack(boss,index,dir,windup)
     end
     boss.model:SetAttribute("BossInAttack",true)
     boss.model:SetAttribute("BossAttackIndex",index)
-    boss.model:SetAttribute("BossAttackStarted",Workspace:GetServerTimeNow())
+    local timeline=AttackTimeline.begin(windup,0,.35)
+    boss.attackTimeline=timeline
+    boss.model:SetAttribute("BossAttackStarted",timeline.startedAt)
+    boss.model:SetAttribute("BossAttackImpactTime",timeline.impactAt)
     boss.model:SetAttribute("BossWindupDuration",windup)
     local pose=poseAngles[index] or {
         CFrame.Angles(math.rad(-105),math.rad((index%2==0) and 35 or -35),math.rad(62)),
@@ -210,7 +214,7 @@ local function runAttack(boss,index,target)
         for _,where in ipairs(marked) do
             visual(boss,"BossMark",where,dir,Color3.fromRGB(255,93,65),index,{radius=10,duration=windup})
         end
-        task.wait(windup)
+        if not AttackTimeline.waitUntil(boss.attackTimeline.impactAt,function() return isLive(boss) and not boss.reviving end) then return end
         if not isLive(boss) or boss.reviving then return end
         releaseAttack(boss,index)
         for _,where in ipairs(marked) do
@@ -222,7 +226,7 @@ local function runAttack(boss,index,target)
         -- The long rectangle is shown by BossTell; do not mark a misleading
         -- circle on the player's old position. Once telegraphed, the direction
         -- and lane origin remain locked even if the victim moves.
-        task.wait(windup)
+        if not AttackTimeline.waitUntil(boss.attackTimeline.impactAt,function() return isLive(boss) and not boss.reviving end) then return end
         if not isLive(boss) or boss.reviving then return end
         releaseAttack(boss,index)
         visual(boss,"BossStrike",origin,dir,color,index,{range=64,halfWidth=5.5})
@@ -230,7 +234,7 @@ local function runAttack(boss,index,target)
     elseif index==5 then
         -- One physical-looking, collision-tested 28-stud dash. Damage only
         -- to the corridor actually traveled, followed by an 11-stud slam.
-        task.wait(windup)
+        if not AttackTimeline.waitUntil(boss.attackTimeline.impactAt,function() return isLive(boss) and not boss.reviving end) then return end
         if not isLive(boss) or boss.reviving then return end
         releaseAttack(boss,index)
         local position=r.Position
@@ -257,7 +261,7 @@ local function runAttack(boss,index,target)
         strikeArea(r.Position,11,22,r.Position,38,hitAlready)
     elseif index==2 then
         -- Each cyclone sweep lands as the arms snap; its outline matches radius.
-        task.wait(windup)
+        if not AttackTimeline.waitUntil(boss.attackTimeline.impactAt,function() return isLive(boss) and not boss.reviving end) then return end
         for pulse=1,3 do
             if not isLive(boss) or boss.reviving then return end
             local radius=15+pulse*2
@@ -267,7 +271,7 @@ local function runAttack(boss,index,target)
             if pulse<3 then task.wait(.52) end
         end
     else -- Thunderquake: single readable 26-stud blast at end of windup.
-        task.wait(windup)
+        if not AttackTimeline.waitUntil(boss.attackTimeline.impactAt,function() return isLive(boss) and not boss.reviving end) then return end
         if not isLive(boss) or boss.reviving then return end
         releaseAttack(boss,index)
         visual(boss,"BossStrike",origin,dir,color,index,{radius=26})
@@ -322,7 +326,7 @@ local function strikeSector(origin,dir,length,dot,damage,knock)
 end
 local function p2Notice(boss,index,at,dir,shape,meta,warning)
     local fields={name=PHASE_NAMES[index],shape=shape,phase=2,
-        duration=warning,impactServerTime=Workspace:GetServerTimeNow()+warning}
+        duration=warning,impactServerTime=boss.attackTimeline.impactAt}
     if meta then for k,v in pairs(meta) do fields[k]=v end end
     visual(boss,"BossPhaseTell",at,dir,boss.color,index,fields)
 end
@@ -333,8 +337,9 @@ local function p2Impact(boss,index,at,dir,shape,meta)
     visual(boss,"BossPhaseStrike",at,dir,boss.color,index,fields)
 end
 local function p2Wait(boss,t)
-    task.wait(t)
-    return isLive(boss) and not boss.reviving
+    local untilTime=Workspace:GetServerTimeNow()+t
+    if boss.attackTimeline and math.abs(t-(boss.attackTimeline.impactAt-boss.attackTimeline.startedAt))<.001 then untilTime=boss.attackTimeline.impactAt end
+    return AttackTimeline.waitUntil(untilTime,function() return isLive(boss) and not boss.reviving end)
 end
 local function phaseTwoAttack(boss,index,target)
     if not isLive(boss) or boss.reviving or boss.phase~=2 or not target.root.Parent then return end
@@ -346,7 +351,7 @@ local function phaseTwoAttack(boss,index,target)
     local base=origin
     prepareAttack(boss,index,dir,windup)
     boss.model:SetAttribute("BossAttackName",PHASE_NAMES[index])
-    boss.model:SetAttribute("BossAttackImpactTime",Workspace:GetServerTimeNow()+windup)
+    boss.model:SetAttribute("BossAttackImpactTime",boss.attackTimeline.impactAt)
     -- 6-10 are five ranged attacks; 11-12 are visible shockwaves.
     if index==6 then -- wider long-distance Star Lance
         local g=P2_AREAS.StarLance
