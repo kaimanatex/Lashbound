@@ -32,7 +32,7 @@ return {
     ThunderVerdict = 0, -- upload audio/ThunderVerdict.wav for thunder finisher
     -- V22 distinct ORIGINAL Ascended boss attack recordings (requires Asset Manager upload).
     BossStarLance = 0, -- audio/BossStarLance.wav
-    BossMeteor = 0, -- audio/BossMeteor.wav
+    -- BossMeteor is declared once above; assign its uploaded ID there.
     BossTrident = 0, -- audio/BossTrident.wav
     BossCrystal = 0, -- audio/BossCrystal.wav
     BossVortex = 0, -- audio/BossVortex.wav
