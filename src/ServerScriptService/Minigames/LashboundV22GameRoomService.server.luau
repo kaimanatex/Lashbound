@@ -11,7 +11,7 @@ remote.Name="LashboundGameRoomRequest";remote.Parent=RS
 local stateRemote=RS:FindFirstChild("LashboundGameRoomState") or Instance.new("RemoteEvent")
 stateRemote.Name="LashboundGameRoomState";stateRemote.Parent=RS
 local lobby=Workspace:WaitForChild("LashboundLobby")
-local names={"ConnectFour","Battleship","PoolA","PoolB"}
+local names={"ConnectFour","Battleship","PoolA"}
 local sessions={}
 local cooldown={}
 local function tableOf(key) return lobby:FindFirstChild("GameRoom_"..key) end
@@ -25,7 +25,7 @@ local function session(key)
     if not sessions[key] then sessions[key]={key=key,mode="idle",version=0,turn=1,score={0,0},winner=0} end
     return sessions[key]
 end
-local function isPool(key) return key=="PoolA" or key=="PoolB" end
+local function isPool(key) return key=="PoolA" end
 local function playerSide(g,p)
     if g.p1==p then return 1 end
     if g.p2==p then return 2 end
@@ -484,7 +484,7 @@ for _,key in ipairs(names) do
         end
         prompt.ActionText="PLAY GAME"
         prompt.ObjectText=(key=="ConnectFour" and "CONNECT FOUR") or
-            (key=="Battleship" and "BATTLESHIP") or (key=="PoolA" and "POOL - TABLE A") or "POOL - TABLE B"
+            (key=="Battleship" and "BATTLESHIP") or "POOL"
         prompt.HoldDuration=0
         prompt.MaxActivationDistance=17
         prompt.RequiresLineOfSight=false
