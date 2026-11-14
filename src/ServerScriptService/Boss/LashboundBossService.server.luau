@@ -586,12 +586,16 @@ local function groundBossFeet(boss,extra)
     end
     if bottom==math.huge then return end
     local delta=floorY+(extra or .8)-bottom
-    if delta>.08 and delta<45 then
+    local footSpan=boss.root.Position.Y-bottom -- measure before repositioning
+    -- Adjust DOWN for float as well as UP for sink (only at spawn/phase change).
+    if math.abs(delta)>.09 and math.abs(delta)<45 then
         boss.model:PivotTo(boss.model:GetPivot()+Vector3.new(0,delta,0))
     end
     local leg=boss.model:FindFirstChild("Right Leg")
-    local neutral=boss.root.Size.Y*.5+(leg and leg.Size.Y*.5 or 1.5)
-    boss.hum.HipHeight=math.max(boss.hum.HipHeight, math.max(0,boss.root.Position.Y-floorY-neutral))
+    if not leg then return end
+    -- R6 root height = upper-leg Y + half root Y + HipHeight.
+    -- Measure the actual foot offset, not the root's world-space height.
+    boss.hum.HipHeight=math.clamp(footSpan+.18-leg.Size.Y-boss.root.Size.Y*.5,0,28)
 end
 local function reviveBoss(boss)
     if not isLive(boss) or boss.reviving or boss.phase~=1 or boss.revived then return end
@@ -625,7 +629,7 @@ local function reviveBoss(boss)
         boss.model:SetAttribute("BossReviving",false)
         boss.model:SetAttribute("BossInvulnerable",false)
         boss.model:SetAttribute("BossInAttack",false)
-        groundBossFeet(boss,2.1)
+        groundBossFeet(boss,.28)
         publishState("BOSS_ASCENDED",nil)
     end)
     publishState("REVIVING",nil)
@@ -662,7 +666,7 @@ local function reviveBoss(boss)
     -- The phase-two rig is twice as large, so read foot clearance after scaling.
     task.wait(.70)
     if not isLive(boss) then return end
-    groundBossFeet(boss,2.1)
+    groundBossFeet(boss,.28)
     basePivot=boss.model:GetPivot()
     local skyPivot=basePivot+Vector3.new(0,25,0)
     travelRevive(boss,basePivot,skyPivot,.80)
@@ -693,7 +697,7 @@ local function reviveBoss(boss)
     task.wait(1.32) -- hold the charged landing pose; total revival ~5.1s
     if not isLive(boss) then return end
     boss.root.Anchored=false
-    groundBossFeet(boss,2.1)
+    groundBossFeet(boss,.28)
     boss.hum.WalkSpeed=13
     boss.reviving=false
     boss.model:SetAttribute("BossReviving",false)
@@ -777,7 +781,7 @@ local function buildBoss(arena,slot)
     hum.RigType=Enum.HumanoidRigType.R6
     hum.MaxHealth=MAX_HEALTH;hum.Health=MAX_HEALTH;hum.WalkSpeed=10
     hum.JumpPower=0;hum.BreakJointsOnDeath=false
-    hum.HipHeight=7.8
+    hum.HipHeight=5.01 -- R6 articulated boot clearance, not additive root lift
     hum.Parent=model
     local healthGui=Instance.new("BillboardGui")
     healthGui.Name="ColossusHealth"
@@ -811,14 +815,14 @@ local function buildBoss(arena,slot)
     params.RespectCanCollide=true
     local ground=Workspace:Raycast(Vector3.new(x,80,z),Vector3.new(0,-150,0),params)
     local floorY=(ground and ground.Normal.Y>.65) and ground.Position.Y or .25
-    local spawn=Vector3.new(x,floorY+11.9,z)
+    local spawn=Vector3.new(x,floorY+10.16,z)
     model:PivotTo(CFrame.lookAt(spawn,Vector3.new(0,spawn.Y,-620)))
     pcall(function()root:SetNetworkOwner(nil)end)
     local boss={model=model,hum=hum,root=root,right=right,left=left,rc0=right.C0,lc0=left.C0,
         rightHip=rightHip,leftHip=leftHip,rootJoint=rootJoint,rootC0=rootJoint.C0,
         color=color,arena=arena,epoch=epoch,attackIndex=slot,active=true,slot=slot,
         phase=1,revived=false,reviving=false,lastMoves={},lastGroundFix=0}
-    groundBossFeet(boss,1.1)
+    groundBossFeet(boss,.18)
     currentBoss=boss
     model:GetAttributeChangedSignal("ReviveTrigger"):Connect(function()
         if not boss.reviving and boss.phase==1 and not boss.revived then
@@ -857,7 +861,34 @@ local function buildBoss(arena,slot)
             if not boss.reviving and clock-boss.lastGroundFix>.72 then
                 boss.lastGroundFix=clock
                 if root.Anchored then root.Anchored=false end
-                groundBossFeet(boss,boss.phase==2 and 2.1 or 1.1)
+                -- Avoid teleporting while the articulated legs animate.
+                -- Small bidirectional hip adjustments settle the rig on the floor.
+                if not model:GetAttribute("BossMoving")
+                    and not model:GetAttribute("BossInAttack")
+                    and math.abs(root.AssemblyLinearVelocity.Y)<2.4 then
+                    local params=RaycastParams.new()
+                    params.FilterType=Enum.RaycastFilterType.Exclude
+                    params.FilterDescendantsInstances={model}
+                    params.RespectCanCollide=true
+                    local hit=Workspace:Raycast(root.Position+Vector3.new(0,60,0),Vector3.new(0,-160,0),params)
+                    if hit and hit.Normal.Y>.7 then
+                        local lower=math.huge
+                        for _,part in ipairs(model:GetDescendants()) do
+                            if part:IsA("BasePart") and (part.Name=="Left Foot" or part.Name=="Right Foot") then
+                                local half=part.Size*.5
+                                local cf=part.CFrame
+                                local extent=math.abs(cf.RightVector.Y)*half.X+math.abs(cf.UpVector.Y)*half.Y+math.abs(cf.LookVector.Y)*half.Z
+                                lower=math.min(lower,part.Position.Y-extent)
+                            end
+                        end
+                        if lower~=math.huge then
+                            local error=lower-(hit.Position.Y+.18)
+                            if math.abs(error)>.4 and math.abs(error)<7 then
+                                hum.HipHeight=math.clamp(hum.HipHeight-error*.45,0,28)
+                            end
+                        end
+                    end
+                end
             end
             local target,dist=nearest(root.Position)
             if boss.reviving or model:GetAttribute("BossInAttack") then
