@@ -130,7 +130,7 @@ local function whipSwing(payload)
     local step=math.clamp(tonumber(payload.step) or 1,1,3)
     local power=payload.kind=="Power"
     local heavy=payload.kind=="Heavy"
-    local duration=heavy and .9 or power and .84 or step==3 and .88 or .78
+    local duration=heavy and .9 or power and 1.05 or step==3 and .88 or .78
     local range=tonumber(payload.range) or (heavy and 33 or power and 27 or step==3 and 25 or 19)
     local polarity=(step==2) and -1 or 1
     local holder=Instance.new("Folder")
@@ -197,7 +197,7 @@ local function whipSwing(payload)
         -- SERVER impact moment. The tip overtakes the thicker base at release.
         local snapSeconds=typeof(payload.impactServerTime)=="number" and typeof(payload.startedAt)=="number"
             and math.max(.05,payload.impactServerTime-payload.startedAt)
-            or (heavy and .33 or power and .37 or .29)
+            or (heavy and .33 or power and .52 or .29)
         local elapsedTime=elapsed()
         local launch=math.clamp((elapsedTime-.055)/(snapSeconds-.055),0,1)
         local recoil=math.clamp((elapsedTime-(snapSeconds+.075))/.33,0,1)
@@ -471,7 +471,7 @@ Feedback.OnClientEvent:Connect(function(kind,_,payload)
     if mode=="Attack" or mode=="Power" or mode=="Heavy" then
         task.spawn(whipSwing,payload)
         if mode=="Power" then
-            task.delay(math.max(0,(payload.impactServerTime or (workspace:GetServerTimeNow()+.37))-workspace:GetServerTimeNow()),function()
+            task.delay(math.max(0,(payload.impactServerTime or (workspace:GetServerTimeNow()+.52))-workspace:GetServerTimeNow()),function()
                 if fx.Parent then abilitySpectacle(payload) end
             end)
         end

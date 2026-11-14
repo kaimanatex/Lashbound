@@ -32,9 +32,9 @@ local function makePose(style,mode,t)
     if mode=="Idle" then
         stride=.025; crouch=.018*body; head=math.sin(phase*.55+style)*.05
     elseif mode=="Walk" then
-        stride=.66; crouch=.060*math.abs(body);twist=.082*gait
+        stride=.78; crouch=.075*math.abs(body);twist=.082*gait
     elseif mode=="Strafe" then
-        stride=.38; crouch=.10*math.abs(body);twist=.15*side
+        stride=.52; crouch=.085*math.abs(body);twist=.15*side
     elseif mode=="Attack" then
         attack=math.sin(math.pi*ease(t))
         local release=ease((t-.58)/.20)
@@ -82,8 +82,8 @@ local function makePose(style,mode,t)
         elbowR=cf(-elbowR,side*.08*attack,0),elbowL=cf(-elbowL,0,0),
         wristR=cf(.20*attack+.07*gait,0,-side*.32*attack),wristL=cf(.02+.1*flinch,0,0),
         hipR=cf(legR+.22*dodge,0,.045*body),hipL=cf(legL+.22*dodge,0,-.045*body),
-        kneeR=cf(-.13-math.max(0,legR)*.7-.45*dodge,0,0),
-        kneeL=cf(-.13-math.max(0,legL)*.7-.45*dodge,0,0),
+        kneeR=cf(-.18-math.max(0,legR)*.75-.45*dodge,0,0),
+        kneeL=cf(-.18-math.max(0,legL)*.75-.45*dodge,0,0),
         ankleR=cf(.06+math.max(0,legR)*.24,0,0),ankleL=cf(.06+math.max(0,legL)*.24,0,0),
         grip=cf(.12*attack+.05*body,0,side*.07*attack),
     }
@@ -169,7 +169,7 @@ RunService.PreSimulation:Connect(function(dt)
                 st.lastUpdate=now
                 local v=st.root.AssemblyLinearVelocity
                 local speed=Vector3.new(v.X,0,v.Z).Magnitude
-                local goal=math.clamp(speed/13,0,1)
+                local goal=math.clamp(speed/10,0,1)
                 st.walkBlend+= (goal-st.walkBlend)*(1-math.exp(-elapsed*9))
                 st.phase+=elapsed*(6.5+math.min(speed,20)*.34)
                 local attackTime=now-(model:GetAttribute("BotAttackStart") or -100)
@@ -182,7 +182,7 @@ RunService.PreSimulation:Connect(function(dt)
                 elseif attackTime>=0 and now<impactAt+.38 then
                     mode="Attack";t=attackTime/math.max(.1,impactAt-(model:GetAttribute("BotAttackStart") or now)+.38)
                 elseif st.hum.Health<st.hum.MaxHealth*.32 and speed>1.8 then mode="Strafe"
-                elseif st.walkBlend>.19 then mode=speed>9 and "Walk" or "Strafe"
+                elseif st.walkBlend>.14 then mode=speed>4.5 and "Walk" or "Strafe"
                 elseif model:GetAttribute("BotFrozen") then mode="Stun" end
                 local pose=sample(st.style,mode,t)
                 local timeAlpha=1-math.exp(-elapsed*16)

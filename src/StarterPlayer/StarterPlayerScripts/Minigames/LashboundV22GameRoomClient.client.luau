@@ -60,7 +60,7 @@ local function boardTick(win)
 end
 
 local angle=0;local power=65
-local mapping={ConnectFour="CONNECT FOUR",Battleship="BATTLESHIP",PoolA="POOL TABLE A",PoolB="POOL TABLE B"}
+local mapping={ConnectFour="CONNECT FOUR",Battleship="BATTLESHIP",PoolA="POOL"}
 close.Activated:Connect(function()
     if current~="" then Request:FireServer(current,"Exit") end
     ui.Enabled=false
@@ -227,7 +227,7 @@ local function render()
     host.Visible=snap.mode=="idle" or snap.winner~=0
     join.Visible=snap.mode=="waiting" and snap.side==0
     restart.Visible=snap.winner~=0 and snap.side~=0
-    local isPool=current=="PoolA" or current=="PoolB"
+    local isPool=current=="PoolA"
     if isPool and poolView and poolView.felt.Parent then
         updatePool() -- preserve UI and tween moving balls, don't rebuild at every snapshot
         return
@@ -250,7 +250,7 @@ State.OnClientEvent:Connect(function(key,verb,data)
     elseif key==current and ui.Enabled then
         local previousVersion=lastVersion
         lastVersion=data.version or -1
-        if current~="PoolA" and current~="PoolB" and lastVersion~=previousVersion then
+        if current~="PoolA" and lastVersion~=previousVersion then
             boardTick(data.winner and data.winner>0)
         end
         snap=data;render()

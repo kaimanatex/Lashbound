@@ -51,6 +51,17 @@ local function play(key,volume,speed,origin)
     s:Play()
 end
 feedback.OnClientEvent:Connect(function(kind,_,payload)
+    if kind=="Hit" then
+        -- Server only sends this after TakeDamage succeeds.
+        local now=os.clock()
+        if now-(last.ConfirmedHit or -100)<.095 then return end
+        last.ConfirmedHit=now
+        play("Hit",.94,type(payload)=="table" and payload.heavy and .84 or 1+math.random()*.08)
+        task.delay(.045,function()
+            if script.Parent then play("Hit",.43,.73) end
+        end)
+        return
+    end
     if kind~="Visual" or type(payload)~="table" or typeof(payload.origin)~="Vector3" then return end
     local event=payload.kind
     if event~="Attack" and event~="Heavy" and event~="Power" and event~="Impact" then return end
@@ -68,10 +79,13 @@ feedback.OnClientEvent:Connect(function(kind,_,payload)
     if now-(last[dedupeKey] or -20)<.08 then return end
     last[dedupeKey]=now
     if event=="Impact" then
-        play("Hit",.46,1.12,payload.origin)
+        -- Attacker already hears authoritative Hit; spectators hear 3D impact.
+        if payload.actorUserId~=me.UserId then
+            play("Hit",.7*factor,.88+math.random()*.16,payload.origin)
+        end
     else
         -- Sound onset follows the physical whip tip rather than input press.
-        local delayTime=event=="Heavy" and .33 or event=="Power" and .37 or .29
+        local delayTime=event=="Heavy" and .33 or event=="Power" and .52 or .29
         if typeof(payload.impactServerTime)=="number" then
             delayTime=math.max(0,payload.impactServerTime-workspace:GetServerTimeNow())
         end

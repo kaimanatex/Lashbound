@@ -179,6 +179,7 @@ local function spawnBot(arena,marker,index)
     hum.RigType=Enum.HumanoidRigType.R6
     hum.MaxHealth=95;hum.Health=95;hum.WalkSpeed=14;hum.JumpPower=52
     hum.BreakJointsOnDeath=false
+    hum.HipHeight=2.55
     hum.Parent=model
     model.PrimaryPart=root
     local markerPos=marker.Position
@@ -187,7 +188,13 @@ local function spawnBot(arena,marker,index)
         folder=Instance.new("Folder");folder.Name="LashboundBots";folder.Parent=arena
     end
     model.Parent=folder
-    model:PivotTo(CFrame.new(markerPos+Vector3.new(0,3.3,0)))
+    local params=RaycastParams.new()
+    params.FilterType=Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances={model}
+    params.RespectCanCollide=true
+    local hit=Workspace:Raycast(markerPos+Vector3.new(0,35,0),Vector3.new(0,-90,0),params)
+    local groundY=(hit and hit.Normal.Y>.65) and hit.Position.Y or markerPos.Y
+    model:PivotTo(CFrame.new(markerPos.X,groundY+3.85,markerPos.Z))
     local ui=Instance.new("BillboardGui")
     ui.Name="SentinelHealthBar"
     ui.Size=UDim2.fromOffset(145,55);ui.StudsOffsetWorldSpace=Vector3.new(0,3.2,0)
@@ -216,7 +223,7 @@ local function spawnBot(arena,marker,index)
         origin=markerPos,lastAttack=-10,lastPath=0,route=nil,wp=2,target=nil,
         leftHip=torso:FindFirstChild("Left Hip"),rightHip=torso:FindFirstChild("Right Hip"),
         leftShoulder=torso:FindFirstChild("Left Shoulder"),
-        dodgeAt=-10,lastReactAt=-100, strafeDirection=index%2==0 and 1 or -1,
+        dodgeAt=-10,lastReactAt=-100,lastGroundCheck=0, strafeDirection=index%2==0 and 1 or -1,
         style=index%3+1, lastFeint=-10, burstUntil=-10, attackIndex=0,
         strafeUntil=0, thinkingUntil=0, pendingAttack=false,
         rng=Random.new(9173+index*1091)}
@@ -372,12 +379,12 @@ local function attack(state,target)
 end
 
 local function npcDodge(state,target,now,dist)
-    if dist>26 or dist<2 or state.pendingAttack or now-state.dodgeAt<3.1 then return false end
+    if dist>26 or dist<2 or state.pendingAttack or now-state.dodgeAt<5.0 then return false end
     -- Counter attacks read the real player's attack windup; not omniscient.
     local when=target.player:GetAttribute("WhipWindupAt") or -100
     if now-when>.35 or when<=state.lastReactAt then return false end
     state.lastReactAt=when
-    if state.rng:NextNumber()>.56 then return false end
+    if state.rng:NextNumber()>.24 then return false end
     state.dodgeAt=now
     local flat=target.root.Position-state.root.Position
     local toward=Vector3.new(flat.X,0,flat.Z)
@@ -432,6 +439,32 @@ local function animateGait(state,now)
     end
 end
 
+
+-- Place animated boots above the arena collision floor without raycasting each frame.
+local function preventSunkenSentinel(state,now)
+    if now-state.lastGroundCheck<.55 then return end
+    state.lastGroundCheck=now
+    local params=RaycastParams.new()
+    params.FilterType=Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances={state.model}
+    params.RespectCanCollide=true
+    local ground=Workspace:Raycast(state.root.Position+Vector3.new(0,15,0),Vector3.new(0,-40,0),params)
+    if not ground or ground.Normal.Y<.7 then return end
+    local lowest=math.huge
+    for _,part in ipairs(state.model:GetDescendants()) do
+        if part:IsA("BasePart") and (part.Name=="Left Foot" or part.Name=="Right Foot") then
+            local half=part.Size*.5
+            local cf=part.CFrame
+            local extent=math.abs(cf.RightVector.Y)*half.X+math.abs(cf.UpVector.Y)*half.Y+math.abs(cf.LookVector.Y)*half.Z
+            lowest=math.min(lowest,part.Position.Y-extent)
+        end
+    end
+    if lowest==math.huge then return end
+    local correction=ground.Position.Y+.25-lowest
+    if correction>.15 and correction<3 then
+        state.model:PivotTo(state.model:GetPivot()+Vector3.new(0,correction,0))
+    end
+end
 local function circlePosition(state,target,distance,now)
     local relative=target.root.Position-state.root.Position
     local flat=Vector3.new(relative.X,0,relative.Z)
@@ -467,6 +500,7 @@ while script.Parent do
             table.remove(bots,i)
         else
             animateGait(bot,now)
+            preventSunkenSentinel(bot,now)
             local target,dist=findNearest(bot)
             if now<(bot.model:GetAttribute("BotFrozenUntil") or 0) then
                 bot.hum:MoveTo(bot.root.Position)

@@ -209,7 +209,11 @@ for row=1,8 do for col=1,8 do
     tile.BackgroundTransparency=1;tile.Text=''
     tile.AutoButtonColor=false;tile.ZIndex=3
     frames[i]=tile
-    local tiny=label(tile,'',UDim2.fromOffset(34,35),UDim2.fromOffset(15,13),Enum.Font.GothamBold,Color3.fromRGB(102,87,72))
+    local tiny=label(tile,'',UDim2.fromOffset(0,0),UDim2.fromScale(1,1),Enum.Font.GothamBlack,Color3.fromRGB(102,87,72))
+    tiny.TextScaled=false
+    tiny.TextSize=33
+    tiny.TextStrokeColor3=Color3.fromRGB(20,21,27)
+    tiny.ZIndex=4
     tiny.Name='RoleHint'
     tiny.TextStrokeTransparency=0
     tile.Activated:Connect(function()
@@ -246,8 +250,9 @@ local function refresh(data)
         local piece=board[i]
         local hint=tile:FindFirstChild('RoleHint')
         if hint then
-            hint.Text=(piece and piece~='') and (glyphLetters[piece:lower()] or '') or ''
-            hint.TextColor3=(piece and piece:match('%u')) and Color3.fromRGB(251,242,215) or Color3.fromRGB(40,29,32)
+            hint.Text=(piece and piece~='') and (glyphLetters[piece:lower()] or '?') or ''
+            hint.TextColor3=(piece and piece:match('%u')) and Color3.fromRGB(255,252,234) or Color3.fromRGB(34,38,46)
+            hint.TextStrokeTransparency=(piece and piece:match('%u')) and .12 or .72
         end
     end
     highlight()
