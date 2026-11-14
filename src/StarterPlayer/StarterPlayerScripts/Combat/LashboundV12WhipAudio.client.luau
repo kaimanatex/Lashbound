@@ -19,7 +19,8 @@ local fallback={
 local last={}
 local function play(key,volume,speed)
     local asset=ids[key]
-    local uri=(type(asset)=="number" and asset>0) and "rbxassetid://"..asset or fallback[key]
+    local validId=(type(asset)=="number" and asset>0) or (type(asset)=="string" and asset:match("^rbxassetid://%d+$")~=nil)
+    local uri=validId and (type(asset)=="number" and "rbxassetid://"..asset or asset) or fallback[key]
     if not uri then return end
     local s=Instance.new("Sound")
     s.Name="LashboundAudible_"..key
@@ -58,7 +59,7 @@ feedback.OnClientEvent:Connect(function(kind,_,payload)
         task.delay(delayTime,function()
             if not script.Parent then return end
             play(key,.9*factor,event=="Attack" and (payload.step==2 and 1.22 or payload.step==3 and .89 or 1.07) or .94)
-            if (type(ids[key])~="number" or ids[key]==0) then
+            if not ((type(ids[key])=="number" and ids[key]>0) or (type(ids[key])=="string" and ids[key]:match("^rbxassetid://%d+$"))) then
                 play("Hit",.22*factor,1.46) -- brief crack transient on fallback
             end
         end)
