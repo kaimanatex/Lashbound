@@ -8,6 +8,7 @@ local DataStoreService = game:GetService("DataStoreService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Config = require(RS:WaitForChild("WhipConfig"))
+local AttackTimeline=require(game:GetService("ServerScriptService"):WaitForChild("Combat"):WaitForChild("AttackTimeline"))
 local botCoinEvent=game:GetService("ServerScriptService"):WaitForChild("LashboundBotCoins")
 local ApplyStatus=game:GetService("ServerScriptService"):WaitForChild("LashboundApplyStatus")
 local bossCoinEvent=game:GetService("ServerScriptService"):WaitForChild("LashboundBossCoins")
@@ -878,14 +879,15 @@ end
 local function melee(player,root,character,dir,step)
     local attackSerial=(character:GetAttribute("LashAttackSerial") or 0)+1
     character:SetAttribute("LashAttackSerial",attackSerial)
-    local serverStart=Workspace:GetServerTimeNow()
+    local timeline=AttackTimeline.begin(.29,.11,.30)
+    local serverStart=timeline.startedAt
     local cfg=Whips[player:GetAttribute("SelectedWhip") or "Rope"] or Whips.Rope
     markWhipMotion(character,"Attack",step,step==3 and .85 or .7)
     swingModel(character,step,"Attack")
     local visualRange=cfg.Range*(step==3 and 1.1 or 1)
     local hitDot=(step==3 and .45 or .66)
     broadcastAction(root.Position,"Attack",dir,cfg.Color,step,player:GetAttribute("SelectedWhip"),player.UserId,
-        {shape="sweptLash",range=visualRange,impactAt=.29,duration=.4},serverStart)
+        {shape="sweptLash",range=visualRange,impactAt=timeline.impactAt-serverStart,duration=timeline.endsAt-serverStart},serverStart)
     player:SetAttribute("WhipWindupAt", os.clock())
     player:SetAttribute("LastCombatAt",os.clock())
     player:SetAttribute("WhipAim", dir)
@@ -893,7 +895,11 @@ local function melee(player,root,character,dir,step)
     local center=root.Position+Vector3.new(0,2,0)
     fxLine(center,center+dir*(range*.83),cfg.Color,step==3 and .38 or .22)
     -- Impact lands after the visible wind-up; Sentinels and players can react.
-    task.delay(.29,function()
+    task.spawn(function()
+        if not AttackTimeline.waitUntil(timeline.impactAt,function()
+            return player.Parent==Players and root.Parent~=nil and player.Character==character
+                and character:GetAttribute("LashAttackSerial")==attackSerial and isArena(player)
+        end) then return end
         if player.Parent~=Players or not root.Parent or player.Character~=character
            or character:GetAttribute("LashAttackSerial")~=attackSerial
            or not isArena(player) then return end
