@@ -394,7 +394,8 @@ local function simulatePool(g,angle,power,who)
 end
 local function start(g,mode,p)
     if g.busy then return end
-    if g.mode~="idle" and g.winner==0 and playerSide(g,p)==0 then return end
+    -- Only the current host may restart an occupied table, including finished games.
+    if g.mode~="idle" and g.p1~=p then return end
     reset(g,mode,p)
     if g.key=="ConnectFour" then
         g.board=table.create(42,0)
