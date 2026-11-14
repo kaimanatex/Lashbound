@@ -408,8 +408,14 @@ local function start(g,mode,p)
     broadcast(g)
 end
 local function getReady(g,p)
-    if g.mode~="waiting" or g.p1==p then return end
-    if not g.p1 or g.p1.Parent~=Players then g.mode="idle";return end
+    if g.mode~="waiting" or g.p1==p or g.p2~=nil then return end
+    if not g.p1 or g.p1.Parent~=Players then
+        g.round=(g.round or 0)+1
+        g.mode="idle";g.p1=nil;g.p2=nil;g.busy=false
+        g.notice="Host disconnected. Table ready for a new match."
+        broadcast(g)
+        return
+    end
     g.p2=p;g.mode="pvp";g.notice="Both players ready! Player One goes first."
     broadcast(g)
 end
@@ -526,6 +532,9 @@ Players.PlayerRemoving:Connect(function(p)
             g.version=(g.version or 0)+1
             g.winner=0;g.mode="idle";g.busy=false;g.p1=nil;g.p2=nil
             g.notice="A player left. Table ready for a new match."
+            if g.physical and g.physical.Parent then g.physical:Destroy() end
+            g.physical=nil
+            broadcast(g)
             if remaining and remaining.Parent==Players then send(g,remaining) end
         end
     end

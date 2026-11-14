@@ -311,7 +311,8 @@ local function strikeRingBand(origin,minRadius,maxRadius,damage,knock)
     for _,t in ipairs(playersInArena()) do
         local delta=t.root.Position-origin
         local flat=Vector3.new(delta.X,0,delta.Z)
-        if flat.Magnitude>=minRadius and flat.Magnitude<=maxRadius and math.abs(delta.Y)<=11 then
+        if flat.Magnitude>=minRadius and flat.Magnitude<=maxRadius and math.abs(delta.Y)<=11
+            and clearBossLine(origin+Vector3.new(0,2,0),t.root.Position+Vector3.new(0,2,0)) then
             hitPlayer(t,damage,origin,knock)
         end
     end
@@ -321,7 +322,9 @@ local function strikeSector(origin,dir,length,dot,damage,knock)
         local delta=t.root.Position-origin
         local flat=Vector3.new(delta.X,0,delta.Z)
         if flat.Magnitude>1 and flat.Magnitude<=length and math.abs(delta.Y)<=13
-            and flat.Unit:Dot(dir)>=dot then hitPlayer(t,damage,origin,knock) end
+            and flat.Unit:Dot(dir)>=dot
+            and clearBossLine(origin+Vector3.new(0,2,0),t.root.Position+Vector3.new(0,2,0)) then
+            hitPlayer(t,damage,origin,knock) end
     end
 end
 local function p2Notice(boss,index,at,dir,shape,meta,warning)
