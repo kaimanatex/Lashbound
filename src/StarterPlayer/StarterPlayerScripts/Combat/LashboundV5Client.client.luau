@@ -275,16 +275,42 @@ local comboStage=0
 local comboAt=-100
 local lastPower=0
 local lastDodge=0
+local lastPointerPosition=nil
 local function aim()
     local char=player.Character
     local root=char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return Vector3.new(0,0,-1) end
-    local d=root.CFrame.LookVector
     local camera=workspace.CurrentCamera
-    if UIS.TouchEnabled and camera and not UIS.MouseEnabled then d=camera.CFrame.LookVector end
-    d=Vector3.new(d.X,0,d.Z)
-    if d.Magnitude<.1 then return Vector3.new(0,0,-1) end
-    return d.Unit
+    if not root then return Vector3.new(0,0,-1) end
+    if camera then
+        -- First-person is locked to the central crosshair; free camera aims
+        -- at the clicked or tapped world pixel (not the avatar facing vector).
+        local screen
+        if player.CameraMode==Enum.CameraMode.LockFirstPerson then
+            screen=camera.ViewportSize*.5
+        elseif lastPointerPosition then
+            screen=lastPointerPosition
+        elseif UIS.MouseEnabled then
+            local m=UIS:GetMouseLocation()
+            screen=Vector2.new(m.X,m.Y)
+        else
+            screen=camera.ViewportSize*.5
+        end
+        local ray=camera:ViewportPointToRay(screen.X,screen.Y)
+        local params=RaycastParams.new()
+        params.FilterType=Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances={char}
+        local hit=workspace:Raycast(ray.Origin,ray.Direction*600,params)
+        local target=hit and hit.Position or ray.Origin+ray.Direction*120
+        local delta=target-root.Position
+        local flat=Vector3.new(delta.X,0,delta.Z)
+        if flat.Magnitude>.08 then return flat.Unit end
+        local forward=camera.CFrame.LookVector
+        flat=Vector3.new(forward.X,0,forward.Z)
+        if flat.Magnitude>.08 then return flat.Unit end
+    end
+    local forward=root.CFrame.LookVector
+    local flat=Vector3.new(forward.X,0,forward.Z)
+    return flat.Magnitude>.08 and flat.Unit or Vector3.new(0,0,-1)
 end
 local function guard()
     if shade.Visible or wheelShade.Visible then return false end
@@ -393,12 +419,14 @@ local function pressAttack()
 end
 local function releaseAttack()
     if not holdStart then return end
+    local aimed=aim()
+    lastPointerPosition=nil
     local held=os.clock()-holdStart
     holdStart=nil;chargeSerial+=1
     attack.Text="WHIP / HOLD HEAVY"
     if not guard() then Action:FireServer("ChargeCancel");return end
     if founderActive() then
-        Action:FireServer("OwnerStrike",aim())
+        Action:FireServer("OwnerStrike",aimed)
         return
     end
     local now=os.clock()
@@ -411,7 +439,7 @@ local function releaseAttack()
         lastLight=now
         nextBasicReadyAt=now+1.5*(cfg.AttackCooldown/.68)
         comboStage=0
-        Action:FireServer("Heavy",aim())
+        Action:FireServer("Heavy",aimed)
     else
         Action:FireServer("ChargeCancel")
         local step=(now-comboAt<Config.ComboReset and comboStage<3) and comboStage+1 or 1
@@ -419,7 +447,7 @@ local function releaseAttack()
         comboAt=now
         lastLight=now
         nextBasicReadyAt=now+math.max(.3,Config.ComboCooldowns[step]*(cfg.AttackCooldown/.68))
-        Action:FireServer("Light",aim())
+        Action:FireServer("Light",aimed)
     end
 end
 local function usePower()
@@ -443,7 +471,7 @@ local function useDodge()
     show("DODGE!")
 end
 attack.InputBegan:Connect(function(input)
-    if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then pressAttack() end
+    if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then lastPointerPosition=nil;pressAttack() end
 end)
 attack.InputEnded:Connect(function(input)
     if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then releaseAttack() end
@@ -479,7 +507,10 @@ UIS.InputEnded:Connect(function(input)
 end)
 UIS.InputBegan:Connect(function(input,processed)
     if processed or UIS:GetFocusedTextBox() then return end
-    if input.UserInputType==Enum.UserInputType.MouseButton1 then pressAttack() end
+    if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+        lastPointerPosition=Vector2.new(input.Position.X,input.Position.Y)
+        pressAttack()
+    end
     if input.KeyCode==Enum.KeyCode.Q then usePower() end
     if input.KeyCode==Enum.KeyCode.B then toggleShop() end
     if input.KeyCode==Enum.KeyCode.Escape and wheelShade.Visible then closeWheel() end
