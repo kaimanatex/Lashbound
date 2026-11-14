@@ -575,7 +575,7 @@ end
 -- Clients render brief cosmetic arcs locally; no server-spawned particle floods.
 local function broadcastAction(origin, kind, direction, color, step, whipId, actorUserId, hitbox, serverStart)
     local payload={kind=kind,origin=origin,direction=direction,color=color,step=step,whipId=whipId,actorUserId=actorUserId,startedAt=serverStart or Workspace:GetServerTimeNow()}
-    if kind=="Attack" then payload.impactServerTime=payload.startedAt+.29
+    if kind=="Attack" then payload.impactServerTime=payload.startedAt+((hitbox and hitbox.impactAt) or .29)
     elseif kind=="Heavy" then payload.impactServerTime=payload.startedAt+.33
     elseif kind=="Power" then payload.impactServerTime=payload.startedAt+.37 end
     if hitbox then
@@ -885,15 +885,13 @@ local function melee(player,root,character,dir,step)
     markWhipMotion(character,"Attack",step,step==3 and .85 or .7)
     swingModel(character,step,"Attack")
     local visualRange=cfg.Range*(step==3 and 1.1 or 1)
-    local hitDot=(step==3 and .45 or .66)
     broadcastAction(root.Position,"Attack",dir,cfg.Color,step,player:GetAttribute("SelectedWhip"),player.UserId,
         {shape="sweptLash",range=visualRange,impactAt=timeline.impactAt-serverStart,duration=timeline.endsAt-serverStart},serverStart)
     player:SetAttribute("WhipWindupAt", os.clock())
     player:SetAttribute("LastCombatAt",os.clock())
     player:SetAttribute("WhipAim", dir)
     local range=cfg.Range*(step==3 and 1.1 or 1)
-    local center=root.Position+Vector3.new(0,2,0)
-    fxLine(center,center+dir*(range*.83),cfg.Color,step==3 and .38 or .22)
+    -- The client owns cosmetic lash rendering; avoid duplicate server FX.
     -- Impact lands after the visible wind-up; Sentinels and players can react.
     task.spawn(function()
         if not AttackTimeline.waitUntil(timeline.impactAt,function()
