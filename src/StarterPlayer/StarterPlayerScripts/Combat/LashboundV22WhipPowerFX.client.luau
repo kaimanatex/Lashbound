@@ -104,7 +104,18 @@ local function power(p)
     local right=Vector3.new(-dir.Z,0,dir.X)
     local center=point+dir*13
     dust(point+Vector3.new(0,2,0),clr,.65,10)
-    if id=="Rope" then
+    if id=="Mega" then
+        -- Three rising original-geometry shock rings, no external asset IDs.
+        for i=1,3 do
+            task.delay((i-1)*.13,function()
+                if effects.Parent then
+                    circle(point,4+i*6,clr,.75,1+i*.4)
+                    breath(point+Vector3.new(0,3+i*2,0),clr,4+i*4,.72)
+                    dust(point+Vector3.new(0,i*2,0),clr,.70,12)
+                end
+            end)
+        end
+    elseif id=="Rope" then
         for k=-1,1 do strand(point+Vector3.new(k*.9,3,0),point+dir*30+Vector3.new(k*1.5,2,0),clr,.42,.37) end
         breath(point+dir*24,clr,7,.43)
     elseif id=="Ember" then

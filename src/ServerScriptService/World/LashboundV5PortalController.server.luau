@@ -104,3 +104,42 @@ task.spawn(function()
 end)
 Players.PlayerRemoving:Connect(function(p)nextUse[p]=nil end)
 print("[Lashbound Door] One-way lobby-to-arena gateway ready")
+
+-- Keep terrain grass from poking through the cabin floor (not the arena).
+-- V39: keep the entire enclosed lobby volume clear of stray voxel terrain.
+-- Preserve arena terrain, which is centered 620 studs away.
+local function clearCabinTerrain()
+    Workspace.Terrain:FillBlock(CFrame.new(0,26,0),Vector3.new(178,102,178),Enum.Material.Air)
+end
+task.defer(clearCabinTerrain)
+task.delay(2,clearCabinTerrain)
+task.delay(8,clearCabinTerrain)
+
+-- Original, license-clear portal energy decoration; one physical energy surface only.
+local function lightPortal()
+    local portal=lobby and lobby:FindFirstChild("V37_PortalEnergySurface")
+    if not portal or not portal:IsA("BasePart") then return end
+    portal.CanCollide=false
+    portal.Transparency=.28
+    portal.Material=Enum.Material.Neon
+    portal.Color=Color3.fromRGB(114,70,240)
+    if not portal:FindFirstChild("LashboundPortalGlow") then
+        local glow=Instance.new("PointLight")
+        glow.Name="LashboundPortalGlow";glow.Color=portal.Color
+        glow.Brightness=3.2;glow.Range=26;glow.Shadows=false;glow.Parent=portal
+    end
+    if not portal:FindFirstChild("LashboundPortalMist") then
+        local mist=Instance.new("ParticleEmitter")
+        mist.Name="LashboundPortalMist"
+        mist.Texture="rbxasset://textures/particles/sparkles_main.dds"
+        mist.Color=ColorSequence.new(Color3.fromRGB(87,178,255),Color3.fromRGB(197,99,255))
+        mist.LightEmission=1
+        mist.Rate=45
+        mist.Lifetime=NumberRange.new(.5,1.2)
+        mist.Speed=NumberRange.new(.5,3)
+        mist.SpreadAngle=Vector2.new(180,180)
+        mist.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,.45),NumberSequenceKeypoint.new(1,0)})
+        mist.Parent=portal
+    end
+end
+lightPortal()

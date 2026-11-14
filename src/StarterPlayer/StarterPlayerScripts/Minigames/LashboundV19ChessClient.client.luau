@@ -68,6 +68,7 @@ viewport.Ambient=Color3.fromRGB(198,193,178)
 viewport.LightColor=Color3.fromRGB(255,246,223)
 viewport.LightDirection=Vector3.new(-.5,-1,-.5)
 viewport.Parent=boardFrame
+viewport.Visible=false -- V38 uses readable flat pieces on the board instead of top-down 3D silhouettes
 local viewCamera=Instance.new('Camera')
 viewCamera.Name='VerticalChessCamera'
 viewCamera.FieldOfView=26
@@ -103,6 +104,7 @@ local state=nil
 local selected=nil
 local frames={}
 local shownPieces={}
+local flatPieces={}
 local visibleBoard={}
 local shownVersion=-1
 local shownMode=''
@@ -185,6 +187,28 @@ local function applyViewState(data)
             if shownVersion==version and gui.Enabled then repairPieces(b) end
         end)
     end
+    -- Keep the displayed pieces and authoritative board state synchronized.
+    -- Chess Unicode glyphs can render blank in a font fallback on some devices.
+    -- All six types now have legible letter marks on distinct team-colored tokens.
+    for i=1,64 do
+        local token=flatPieces[i]
+        if token then
+            local piece=b[i] or ''
+            local occupied=type(piece)=='string' and piece~=''
+            token.Visible=occupied
+            if occupied then
+                local white=piece:match('%u')~=nil
+                token.BackgroundColor3=white and Color3.fromRGB(249,245,227) or Color3.fromRGB(37,44,42)
+                local rim=token:FindFirstChildOfClass('UIStroke')
+                if rim then rim.Color=white and Color3.fromRGB(82,80,69) or Color3.fromRGB(237,239,222) end
+                local mark=token:FindFirstChild('PieceLetter')
+                if mark then
+                    mark.Text=piece:upper() -- K Q R B N P in GothamBlack; original 3D piece remains beneath it
+                    mark.TextColor3=white and Color3.fromRGB(40,48,43) or Color3.fromRGB(251,251,239)
+                end
+            end
+        end
+    end
     shownVersion=data.version
     shownMode=data.mode
 end
@@ -196,8 +220,10 @@ local function highlight()
         local last=state and state.lastMove
         local active=selected==ix
         local recent=last and (last[1]==ix or last[2]==ix)
-        tile.BackgroundColor3=active and Color3.fromRGB(63,221,184) or Color3.fromRGB(248,216,105)
-        tile.BackgroundTransparency=active and .43 or recent and .68 or 1
+        local row=math.floor((ix-1)/8)+1
+        local col=(ix-1)%8+1
+        tile.BackgroundColor3=active and Color3.fromRGB(246,246,105) or recent and Color3.fromRGB(202,211,104) or ((row+col)%2==0 and Color3.fromRGB(238,238,210) or Color3.fromRGB(118,150,86))
+        tile.BackgroundTransparency=0
     end
 end
 for row=1,8 do for col=1,8 do
@@ -209,12 +235,38 @@ for row=1,8 do for col=1,8 do
     tile.BackgroundTransparency=1;tile.Text=''
     tile.AutoButtonColor=false;tile.ZIndex=3
     frames[i]=tile
-    local tiny=label(tile,'',UDim2.fromOffset(0,0),UDim2.fromScale(1,1),Enum.Font.GothamBlack,Color3.fromRGB(102,87,72))
-    tiny.TextScaled=false
-    tiny.TextSize=33
-    tiny.TextStrokeColor3=Color3.fromRGB(20,21,27)
-    tiny.ZIndex=4
+    tile.BackgroundColor3=(row+col)%2==0 and Color3.fromRGB(238,238,210) or Color3.fromRGB(118,150,86)
+    tile.BackgroundTransparency=0
+    local token=Instance.new('Frame')
+    token.Name='ChessPieceToken'
+    token.AnchorPoint=Vector2.new(.5,.5)
+    token.Position=UDim2.fromScale(.5,.5)
+    token.Size=UDim2.fromScale(.76,.76)
+    token.BorderSizePixel=0
+    token.ZIndex=4
+    token.Visible=false
+    token.Parent=tile
+    local round=Instance.new('UICorner')
+    round.CornerRadius=UDim.new(1,0)
+    round.Parent=token
+    local rim=Instance.new('UIStroke')
+    rim.Thickness=2
+    rim.Parent=token
+    local mark=Instance.new('TextLabel')
+    mark.Name='PieceLetter'
+    mark.BackgroundTransparency=1
+    mark.Size=UDim2.fromScale(1,1)
+    mark.Font=Enum.Font.GothamBlack
+    mark.TextScaled=true
+    mark.Text=''
+    mark.ZIndex=5
+    mark.Parent=token
+    flatPieces[i]=token
+    local tiny=label(tile,'',UDim2.fromOffset(34,35),UDim2.fromOffset(15,13),Enum.Font.GothamBold,Color3.fromRGB(102,87,72))
     tiny.Name='RoleHint'
+    tiny.TextStrokeColor3=Color3.fromRGB(12,14,20)
+    tiny.TextStrokeTransparency=.10
+    tiny.ZIndex=7
     tiny.TextStrokeTransparency=0
     tile.Activated:Connect(function()
         if not state or state.ended then return end
@@ -251,8 +303,7 @@ local function refresh(data)
         local hint=tile:FindFirstChild('RoleHint')
         if hint then
             hint.Text=(piece and piece~='') and (glyphLetters[piece:lower()] or '?') or ''
-            hint.TextColor3=(piece and piece:match('%u')) and Color3.fromRGB(255,252,234) or Color3.fromRGB(34,38,46)
-            hint.TextStrokeTransparency=(piece and piece:match('%u')) and .12 or .72
+            hint.TextColor3=(piece and piece:match('%u')) and Color3.fromRGB(255,255,245) or Color3.fromRGB(17,20,24)
         end
     end
     highlight()
@@ -268,9 +319,13 @@ close.Activated:Connect(hide)
 versus.Activated:Connect(function()selected=nil;Request:FireServer('PvP')end)
 bot.Activated:Connect(function()selected=nil;Request:FireServer('Bot')end)
 resign.Activated:Connect(function()selected=nil;Request:FireServer('Resign')end)
+-- Only one chess table exists: never block waiting for removed remotes 2-4.
 State.OnClientEvent:Connect(refresh)
 Feedback.OnClientEvent:Connect(function(kind)
-    if kind=='OpenChess' then open() end
+    if kind=='OpenChess' then
+        shownVersion=-1
+        open()
+    end
 end)
 local function resize()
     local camera=workspace.CurrentCamera
