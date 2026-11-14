@@ -652,13 +652,23 @@ local function stunTarget(t,duration)
         local player=t.player
         local maxUntil=math.max(untilTime,player:GetAttribute("StunnedUntil") or 0)
         player:SetAttribute("StunnedUntil",maxUntil)
+        -- Preserve movement settings and avoid an older stun restoring movement
+        -- while a newer stun or slow effect is still active.
+        if t.hum:GetAttribute("LashPreStunSpeed")==nil then
+            t.hum:SetAttribute("LashPreStunSpeed",t.hum.WalkSpeed)
+            t.hum:SetAttribute("LashPreStunJump",t.hum.JumpPower)
+        end
         t.hum.WalkSpeed=0
         t.hum.JumpPower=0
-        task.delay(duration+.03,function()
-            if t.hum.Parent and os.clock()>=(player:GetAttribute("StunnedUntil") or 0) then
-                t.hum.WalkSpeed=18
-                t.hum.JumpPower=52
-            end
+        task.delay(maxUntil-os.clock()+.03,function()
+            if not t.hum.Parent or player.Character~=t.hum.Parent then return end
+            if os.clock()<(player:GetAttribute("StunnedUntil") or 0) then return end
+            local speed=t.hum:GetAttribute("LashPreStunSpeed") or 18
+            local jump=t.hum:GetAttribute("LashPreStunJump") or 52
+            t.hum:SetAttribute("LashPreStunSpeed",nil)
+            t.hum:SetAttribute("LashPreStunJump",nil)
+            t.hum.WalkSpeed=os.clock()<(player:GetAttribute("SlowedUntil") or 0) and 9 or speed
+            t.hum.JumpPower=jump
         end)
     end
 end
@@ -850,8 +860,8 @@ local function lashContacts(player,root,character,dir,reach,step,heavy,maxHits)
                 for _,clock in ipairs(frames) do
                     local base=lashPosition(start,dir,reach,step,clock,0,heavy)
                     local previous=base
-                    for joint=1,48 do
-                        local pointOnLash=lashPosition(start,dir,reach,step,clock,joint/48,heavy)
+                    for joint=1,24 do
+                        local pointOnLash=lashPosition(start,dir,reach,step,clock,joint/24,heavy)
                         if pointSegmentDistance(point,previous,pointOnLash)<=radius
                             or (old and old[joint] and pointSegmentDistance(point,old[joint],pointOnLash)<=radius) then
                             touched=true
@@ -861,7 +871,7 @@ local function lashContacts(player,root,character,dir,reach,step,heavy,maxHits)
                     end
                     if touched then break end
                     old=old or {}
-                    for joint=1,48 do old[joint]=lashPosition(start,dir,reach,step,clock,joint/48,heavy) end
+                    for joint=1,48 do old[joint]=lashPosition(start,dir,reach,step,clock,joint/24,heavy) end
                 end
                 if touched then
                     local ray=Workspace:Raycast(start,point-start,block)
