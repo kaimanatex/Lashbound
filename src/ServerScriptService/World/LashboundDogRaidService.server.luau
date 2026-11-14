@@ -259,6 +259,17 @@ local function stepDog(state,dt,now)
     end
     local target,distance=nearPlayer(state.pos)
     local direction=state.dir
+    -- Sentinel-style awareness: patrol when players are distant, chase when near.
+    if distance>125 then target=nil end
+    if not target then
+        local wanderAt=state.wanderAt or 0
+        if now>=wanderAt then
+            local angle=now*.17+state.index*2.399
+            state.patrol=Vector3.new(math.cos(angle),0,math.sin(angle))
+            state.wanderAt=now+3+(state.index%4)
+        end
+        direction=state.patrol or direction
+    end
     if target then
         local delta=target.root.Position-state.pos
         local flat=Vector3.new(delta.X,0,delta.Z)
@@ -320,6 +331,23 @@ local function stepDog(state,dt,now)
                 player:SetAttribute("LastCombatAt",os.clock())
                 Feedback:FireClient(player,"Message","HOUND BITE -6")
             end)
+        end
+    else
+        -- Idle patrol uses a lightweight swept obstacle check, not 30 pathfinders.
+        local step=direction*state.speed*.27*dt
+        local params=RaycastParams.new()
+        params.FilterType=Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances={state.model,state.model.Parent}
+        params.RespectCanCollide=true
+        local nextPos=state.pos+step
+        local blocked=Workspace:Blockcast(CFrame.new(state.pos),Vector3.new(2,2,2.8),step,params)
+        local ground=Workspace:Raycast(Vector3.new(nextPos.X,18,nextPos.Z),Vector3.new(0,-48,0),params)
+        if blocked or not ground or ground.Normal.Y<.65 or ground.Position.Y>11
+            or math.abs(nextPos.X)>205 or math.abs(nextPos.Z+620)>205 then
+            state.patrol=-direction
+            state.wanderAt=now+1.4
+        else
+            state.pos=Vector3.new(nextPos.X,ground.Position.Y+1.92,nextPos.Z)
         end
     end
     -- Recheck ground even without an aggro target; no suspended idle hounds.

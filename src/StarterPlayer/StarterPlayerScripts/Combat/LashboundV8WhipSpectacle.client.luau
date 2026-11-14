@@ -131,7 +131,7 @@ local function whipSwing(payload)
     local power=payload.kind=="Power"
     local heavy=payload.kind=="Heavy"
     local duration=heavy and .9 or power and 1.05 or step==3 and .88 or .78
-    local range=tonumber(payload.range) or (heavy and 33 or power and 27 or step==3 and 25 or 19)
+    local range=(not power and payload.hitbox and tonumber(payload.hitbox.range)) or tonumber(payload.range) or (heavy and 33 or power and 27 or step==3 and 25 or 19)
     local polarity=(step==2) and -1 or 1
     local holder=Instance.new("Folder")
     holder.Name="FlexibleWhipVisual"
@@ -142,7 +142,8 @@ local function whipSwing(payload)
     -- Nearby attacks have 100 independently positioned visual links.  Longer
     -- distances use LOD for multiplayer, while damage is always checked by
     -- the identical 100-segment server geometry.
-    local links=viewerDistance<75 and 100 or viewerDistance<130 and 50 or 25
+    local links=viewerDistance<75 and 36 or viewerDistance<130 and 16 or 8
+    if range>80 then links=math.min(links,24) end
     for i=1,links+1 do
         local node=Instance.new("Part")
         node.Name="CurvePoint"..i

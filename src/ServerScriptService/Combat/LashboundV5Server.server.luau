@@ -836,6 +836,25 @@ local function lashPosition(base,dir,range,step,seconds,f,heavy)
     local lift=(1-smooth)*math.sin(f*math.pi)*3.7+f*.6
     return base+dir*(extend-coiledBack)+side*sideOffset+Vector3.new(0,lift,0)
 end
+-- Use actual boss limbs instead of the elevated HumanoidRootPart. Phase two
+-- scales the rig, making root-only hit checks miss visible feet and legs.
+local function bossContactPoints(model)
+    local points={}
+    for _,part in ipairs(model:GetDescendants()) do
+        if part:IsA("BasePart") and (part.Name=="Left Leg" or part.Name=="Right Leg"
+            or part.Name=="LeftFoot" or part.Name=="RightFoot"
+            or part.Name=="LeftLowerLeg" or part.Name=="RightLowerLeg"
+            or part.Name=="LeftUpperLeg" or part.Name=="RightUpperLeg"
+            or part.Name=="Torso" or part.Name=="UpperTorso" or part.Name=="LowerTorso") then
+            local radius=math.clamp(math.max(part.Size.X,part.Size.Z)*.58+.7,1.3,5.8)
+            for _,height in ipairs({-.38,0,.38}) do
+                table.insert(points,{position=part.Position+part.CFrame.UpVector*(part.Size.Y*height),radius=radius})
+            end
+        end
+    end
+    return points
+end
+
 local function lashContacts(player,root,character,dir,reach,step,heavy,maxHits)
     local targets=allTargets(player)
     local result={}
@@ -853,30 +872,38 @@ local function lashContacts(player,root,character,dir,reach,step,heavy,maxHits)
             local isHound=t.kind=="Bot" and t.model and t.model:GetAttribute("LashboundDog")==true
             local point=targetRoot.Position+Vector3.new(0,isHound and .35 or math.min(4.2,math.max(1.4,targetRoot.Size.Y*.6)),0)
             local radial=Vector3.new(point.X-start.X,0,point.Z-start.Z)
-            if radial.Magnitude<=reach+5 and math.abs(point.Y-start.Y)<17 then
-                -- Include the hound visible body envelope, not only its invisible root.
-                local radius=isHound and 4.0 or math.clamp(math.max(targetRoot.Size.X,targetRoot.Size.Z)*.62+1.5,2.4,6.8)
+            local bossPoints=t.kind=="Boss" and t.model and bossContactPoints(t.model) or nil
+            local candidates=bossPoints and #bossPoints>0 and bossPoints or {{position=point,radius=isHound and 4.0 or math.clamp(math.max(targetRoot.Size.X,targetRoot.Size.Z)*.62+1.5,2.4,6.8)}}
+            if radial.Magnitude<=reach+18 and (bossPoints or math.abs(point.Y-start.Y)<17) then
                 local touched=false
-                local frames=heavy and { .15,.19,.23,.27,.30,.33,.36 } or {.13,.16,.19,.22,.25,.27,.29,.31}
+                local contactPoint=nil
+                local frames=heavy and { .16,.22,.27,.31,.33,.36 } or {.14,.18,.22,.26,.29,.31}
+                local links=reach>140 and 72 or reach>80 and 56 or 52
                 local old=nil
                 for _,clock in ipairs(frames) do
                     local base=lashPosition(start,dir,reach,step,clock,0,heavy)
                     local previous=base
-                    for joint=1,24 do
-                        local pointOnLash=lashPosition(start,dir,reach,step,clock,joint/24,heavy)
-                        if pointSegmentDistance(point,previous,pointOnLash)<=radius
-                            or (old and old[joint] and pointSegmentDistance(point,old[joint],pointOnLash)<=radius) then
-                            touched=true
-                            break
+                    for joint=1,links do
+                        local pointOnLash=lashPosition(start,dir,reach,step,clock,joint/links,heavy)
+                        for _,candidate in ipairs(candidates) do
+                            local cp=candidate.position
+                            if (cp-start).Magnitude<=reach+candidate.radius+5 and
+                                (pointSegmentDistance(cp,previous,pointOnLash)<=candidate.radius
+                                or (old and old[joint] and pointSegmentDistance(cp,old[joint],pointOnLash)<=candidate.radius)) then
+                                touched=true
+                                contactPoint=cp
+                                break
+                            end
                         end
+                        if touched then break end
                         previous=pointOnLash
                     end
                     if touched then break end
                     old=old or {}
-                    for joint=1,48 do old[joint]=lashPosition(start,dir,reach,step,clock,joint/24,heavy) end
+                    for joint=1,links do old[joint]=lashPosition(start,dir,reach,step,clock,joint/links,heavy) end
                 end
                 if touched then
-                    local ray=Workspace:Raycast(start,point-start,block)
+                    local ray=Workspace:Raycast(start,(contactPoint or point)-start,block)
                     local victimModel=t.model or (t.player and t.player.Character)
                     if not ray or (victimModel and ray.Instance:IsDescendantOf(victimModel)) then
                         table.insert(result,{t=t,dist=radial.Magnitude})
@@ -1090,6 +1117,92 @@ local function summonMirrorCompanion(player,character,cfg)
     end)
 end
 Players.PlayerRemoving:Connect(destroyMirrorCompanion)
+-- Mega Whip: a genuine server-owned 10-second avatar transformation.
+-- Original scale is always restored, even if the player switches weapons.
+local megaActive={}
+local function megaGrow(player,character)
+    if megaActive[player] then return end
+    if player.Character~=character or not character.Parent then return end
+    local humanoid=character:FindFirstChildOfClass("Humanoid")
+    local root=character:FindFirstChild("HumanoidRootPart")
+    if not humanoid or humanoid.Health<=0 or not root then return end
+    local ok,original=pcall(function() return character:GetScale() end)
+    if not ok or type(original)~="number" or original<=0 then
+        notify(player,"Message","Giant transformation not supported for this avatar")
+        return
+    end
+    local targetScale=math.min(original*2.25,4.5)
+    local function lowerFoot()
+        local bottom=math.huge
+        for _,part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") and (part.Name=="LeftFoot" or part.Name=="RightFoot"
+                or part.Name=="Left Leg" or part.Name=="Right Leg") then
+                local half=part.Size*.5
+                local cf=part.CFrame
+                local extent=math.abs(cf.RightVector.Y)*half.X+math.abs(cf.UpVector.Y)*half.Y+math.abs(cf.LookVector.Y)*half.Z
+                bottom=math.min(bottom,part.Position.Y-extent)
+            end
+        end
+        return bottom
+    end
+    local floorcast=RaycastParams.new()
+    floorcast.FilterType=Enum.RaycastFilterType.Exclude
+    floorcast.FilterDescendantsInstances={character}
+    floorcast.RespectCanCollide=true
+    local floor=Workspace:Raycast(root.Position+Vector3.new(0,30,0),Vector3.new(0,-100,0),floorcast)
+    local floorY=floor and floor.Normal.Y>.65 and floor.Position.Y or nil
+    local succeed,reason=pcall(function() character:ScaleTo(targetScale) end)
+    if not succeed then
+        warn("[Lashbound Mega] ScaleTo failed",reason)
+        notify(player,"Message","Giant transformation unavailable for this avatar")
+        return
+    end
+    -- Correct added length so the enlarged feet do not clip into the arena floor.
+    if floorY then
+        local bottom=lowerFoot()
+        if bottom~=math.huge and bottom<floorY+.15 then
+            character:PivotTo(character:GetPivot()+Vector3.new(0,math.min(12,floorY+.15-bottom),0))
+        end
+    end
+    local when=Workspace:GetServerTimeNow()+10
+    local token={character=character,original=original}
+    megaActive[player]=token
+    player:SetAttribute("MegaWhipUntil",when)
+    character:SetAttribute("MegaWhipGiant",true)
+    local cfg=Whips.Mega
+    broadcastAction(root.Position,"MegaGrowth",root.CFrame.LookVector,cfg.Color,1,"Mega",player.UserId)
+    notify(player,"Message","MEGA FORM — 10 SECONDS")
+    task.delay(10,function()
+        if megaActive[player]~=token then return end
+        megaActive[player]=nil
+        player:SetAttribute("MegaWhipUntil",0)
+        if character.Parent then
+            local success,err=pcall(function() character:ScaleTo(original) end)
+            if not success then warn("[Lashbound Mega] restore failed",err) end
+            -- Shrinking can leave the restored avatar hovering after physics scale.
+            local rr=character:FindFirstChild("HumanoidRootPart")
+            local hh=character:FindFirstChildOfClass("Humanoid")
+            if rr and hh and hh.Health>0 then
+                local params=RaycastParams.new()
+                params.FilterType=Enum.RaycastFilterType.Exclude
+                params.FilterDescendantsInstances={character}
+                params.RespectCanCollide=true
+                local ground=Workspace:Raycast(rr.Position+Vector3.new(0,16,0),Vector3.new(0,-90,0),params)
+                if ground and ground.Normal.Y>.7 then
+                    local y=lowerFoot()
+                    if y~=math.huge then
+                        local adjustment=ground.Position.Y+.2-y
+                        if math.abs(adjustment)>.25 and math.abs(adjustment)<13 then
+                            character:PivotTo(character:GetPivot()+Vector3.new(0,adjustment,0))
+                        end
+                    end
+                end
+            end
+            character:SetAttribute("MegaWhipGiant",false)
+        end
+    end)
+end
+Players.PlayerRemoving:Connect(function(player) megaActive[player]=nil end)
 -- Specials intentionally change combat rules; none are just stronger basic attacks.
 -- No unlimited loops, server-side authority for damage and cooldowns.
 local function power(player,root,character,dir)
@@ -1119,6 +1232,8 @@ local function power(player,root,character,dir)
         powerBox={shape="cone",range=30,dot=.62,duration=.63}
     elseif id=="Echo" then
         powerBox={shape="ring",radius=12,duration=.55}
+    elseif id=="Mega" then
+        powerBox={shape="ring",radius=15,duration=.75}
     end
     broadcastAction(root.Position,"Power",dir,cfg.Color,3,id,player.UserId,powerBox)
     -- Commit the ability on the same synchronized whip-tip snap as the client.
@@ -1301,6 +1416,8 @@ local function power(player,root,character,dir)
                 end
             end)
         end
+    elseif id=="Mega" then
+        megaGrow(player,character)
     elseif id=="Echo" then
         summonMirrorCompanion(player,character,cfg)
         broadcastAction(root.Position,"PowerPulse",dir,cfg.Color,1,"Echo",player.UserId,{shape="ring",radius=12,duration=.75})
