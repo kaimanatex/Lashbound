@@ -179,7 +179,7 @@ local function spawnBot(arena,marker,index)
     hum.RigType=Enum.HumanoidRigType.R6
     hum.MaxHealth=95;hum.Health=95;hum.WalkSpeed=14;hum.JumpPower=52
     hum.BreakJointsOnDeath=false
-    hum.HipHeight=2.55
+    hum.HipHeight=1.50 -- R6: actual articulated boot offset minus leg and half root
     hum.Parent=model
     model.PrimaryPart=root
     local markerPos=marker.Position
@@ -194,7 +194,7 @@ local function spawnBot(arena,marker,index)
     params.RespectCanCollide=true
     local hit=Workspace:Raycast(markerPos+Vector3.new(0,35,0),Vector3.new(0,-90,0),params)
     local groundY=(hit and hit.Normal.Y>.65) and hit.Position.Y or markerPos.Y
-    model:PivotTo(CFrame.new(markerPos.X,groundY+3.85,markerPos.Z))
+    model:PivotTo(CFrame.new(markerPos.X,groundY+3.60,markerPos.Z))
     local ui=Instance.new("BillboardGui")
     ui.Name="SentinelHealthBar"
     ui.Size=UDim2.fromOffset(145,55);ui.StudsOffsetWorldSpace=Vector3.new(0,3.2,0)
@@ -460,9 +460,13 @@ local function preventSunkenSentinel(state,now)
         end
     end
     if lowest==math.huge then return end
-    local correction=ground.Position.Y+.25-lowest
-    if correction>.15 and correction<3 then
-        state.model:PivotTo(state.model:GetPivot()+Vector3.new(0,correction,0))
+    -- Floating and clipping both settle through physics, not repeated PivotTo.
+    local error=lowest-(ground.Position.Y+.18)
+    local vel=state.root.AssemblyLinearVelocity
+    if math.abs(error)>.30 and math.abs(error)<4.5
+        and math.abs(vel.Y)<2
+        and now>=(state.model:GetAttribute("BotDodgeUntil") or 0) then
+        state.hum.HipHeight=math.clamp(state.hum.HipHeight-error*.55,0,5)
     end
 end
 local function circlePosition(state,target,distance,now)
