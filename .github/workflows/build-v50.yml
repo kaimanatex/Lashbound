@@ -1,0 +1,31 @@
+name: Publish Lashbound V50 direct Studio file
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'builds/.staging/v50_part_*.txt'
+      - 'tools/rebuild_v50.py'
+      - '.github/workflows/build-v50.yml'
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reassemble exact project and sync source scripts
+        run: python3 tools/rebuild_v50.py
+      - name: Upload direct Roblox Studio place
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lashbound_V50_Studio
+          path: builds/Lashbound_V50_Full_Backlog_Mega_Whip.rbxlx
+      - name: Commit validated project and Lua source synchronization
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add builds/Lashbound_V50_Full_Backlog_Mega_Whip.rbxlx src/
+          if ! git diff --cached --quiet; then
+            git commit -m 'release: publish SHA256-verified V50 Roblox Studio file and source'
+            git push
+          fi
