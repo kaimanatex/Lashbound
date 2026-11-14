@@ -173,6 +173,22 @@ local function prepareAttack(boss,index,dir,windup)
     tweenPose(boss.right,boss.rc0,pose[1],windup*.72)
     tweenPose(boss.left,boss.lc0,pose[2],windup*.72)
     if boss.rootJoint then tweenPose(boss.rootJoint,boss.rootC0,pose[3],windup*.72) end
+    -- Recovery watchdog: a canceled or failed move must not freeze pathfinding.
+    boss.attackSerial=(boss.attackSerial or 0)+1
+    local serial=boss.attackSerial
+    task.delay(9.5,function()
+        if not isLive(boss) or boss.reviving or boss.attackSerial~=serial then return end
+        if boss.model:GetAttribute("BossInAttack")==true then
+            warn("[Lashbound Boss] timed-out move released",index)
+            boss.model:SetAttribute("BossInAttack",false)
+            boss.model:SetAttribute("BossAttackImpactTime",0)
+            if boss.root.Anchored then boss.root.Anchored=false end
+            if boss.hum.WalkSpeed<3 then boss.hum.WalkSpeed=boss.phase==2 and 13 or 10 end
+            tweenPose(boss.right,boss.rc0,CFrame.identity,.22)
+            tweenPose(boss.left,boss.lc0,CFrame.identity,.22)
+            if boss.rootJoint then tweenPose(boss.rootJoint,boss.rootC0,CFrame.identity,.22) end
+        end
+    end)
 end
 local function releaseAttack(boss,index)
     if not isLive(boss) then return end
@@ -190,6 +206,11 @@ end
 local function finishAttack(boss)
     if not boss.model.Parent then return end
     boss.model:SetAttribute("BossInAttack",false)
+    boss.model:SetAttribute("BossAttackImpactTime",0)
+    if not boss.reviving then
+        if boss.root.Anchored then boss.root.Anchored=false end
+        if boss.hum.WalkSpeed<3 then boss.hum.WalkSpeed=boss.phase==2 and 13 or 10 end
+    end
 end
 local function runAttack(boss,index,target)
     if not isLive(boss) or boss.reviving or not target.root.Parent then return end
@@ -543,6 +564,35 @@ local function superchargeWhip(boss)
     charge.LightEmission=1
     charge.Parent=grip
 end
+
+-- Ground by the actual articulated feet, rather than the root part's height.
+local function groundBossFeet(boss,extra)
+    if not boss.model.Parent or not boss.root.Parent then return end
+    local params=RaycastParams.new()
+    params.FilterType=Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances={boss.model}
+    params.RespectCanCollide=true
+    local hit=Workspace:Raycast(boss.root.Position+Vector3.new(0,60,0),Vector3.new(0,-160,0),params)
+    if not hit or hit.Normal.Y<.7 then return end
+    local floorY=hit.Position.Y
+    local bottom=math.huge
+    for _,part in ipairs(boss.model:GetDescendants()) do
+        if part:IsA("BasePart") and (part.Name=="Left Foot" or part.Name=="Right Foot") then
+            local half=part.Size*.5
+            local cf=part.CFrame
+            local extent=math.abs(cf.RightVector.Y)*half.X+math.abs(cf.UpVector.Y)*half.Y+math.abs(cf.LookVector.Y)*half.Z
+            bottom=math.min(bottom,part.Position.Y-extent)
+        end
+    end
+    if bottom==math.huge then return end
+    local delta=floorY+(extra or .8)-bottom
+    if delta>.08 and delta<45 then
+        boss.model:PivotTo(boss.model:GetPivot()+Vector3.new(0,delta,0))
+    end
+    local leg=boss.model:FindFirstChild("Right Leg")
+    local neutral=boss.root.Size.Y*.5+(leg and leg.Size.Y*.5 or 1.5)
+    boss.hum.HipHeight=math.max(boss.hum.HipHeight, math.max(0,boss.root.Position.Y-floorY-neutral))
+end
 local function reviveBoss(boss)
     if not isLive(boss) or boss.reviving or boss.phase~=1 or boss.revived then return end
     boss.reviving=true
@@ -559,6 +609,25 @@ local function reviveBoss(boss)
     boss.hum.Health=1
     local pivot=boss.model:GetPivot()
     boss.root.Anchored=true
+    -- Emergency release if the revival animation exits early.
+    local startedEpoch=boss.epoch
+    task.delay(11,function()
+        if not boss.model.Parent or not boss.reviving or boss.epoch~=startedEpoch then return end
+        warn("[Lashbound Boss] Revival took too long; restoring phase two")
+        boss.phase=2
+        boss.model:SetAttribute("BossPhase",2)
+        boss.model:SetAttribute("BossHasRevived",true)
+        boss.hum.MaxHealth=PHASE_TWO_HEALTH
+        boss.hum.Health=PHASE_TWO_HEALTH
+        boss.hum.WalkSpeed=13
+        boss.root.Anchored=false
+        boss.reviving=false
+        boss.model:SetAttribute("BossReviving",false)
+        boss.model:SetAttribute("BossInvulnerable",false)
+        boss.model:SetAttribute("BossInAttack",false)
+        groundBossFeet(boss,2.1)
+        publishState("BOSS_ASCENDED",nil)
+    end)
     publishState("REVIVING",nil)
     visual(boss,"BossRevival",boss.root.Position,Vector3.new(0,0,-1),boss.color,0,{duration=REVIVE_TIME,phase=2})
     -- One knee hits the ground while the giant braces with its whip arm.
@@ -590,6 +659,11 @@ local function reviveBoss(boss)
     tweenPose(boss.left,boss.lc0,CFrame.Angles(math.rad(-120),0,math.rad(-14)),.62)
     if boss.rootJoint then tweenPose(boss.rootJoint,boss.rootC0,CFrame.identity,.65) end
     boss.model:SetAttribute("BossAttackName","ASCENDING - TAKE COVER")
+    -- The phase-two rig is twice as large, so read foot clearance after scaling.
+    task.wait(.70)
+    if not isLive(boss) then return end
+    groundBossFeet(boss,2.1)
+    basePivot=boss.model:GetPivot()
     local skyPivot=basePivot+Vector3.new(0,25,0)
     travelRevive(boss,basePivot,skyPivot,.80)
     if not isLive(boss) then return end
@@ -619,6 +693,7 @@ local function reviveBoss(boss)
     task.wait(1.32) -- hold the charged landing pose; total revival ~5.1s
     if not isLive(boss) then return end
     boss.root.Anchored=false
+    groundBossFeet(boss,2.1)
     boss.hum.WalkSpeed=13
     boss.reviving=false
     boss.model:SetAttribute("BossReviving",false)
@@ -695,13 +770,14 @@ local function buildBoss(arena,slot)
     for i=1,6 do
         local lash=makePart(model,"ColossusLash_"..i,Vector3.new(math.max(.11,.46-i*.046),math.max(.11,.46-i*.046),2.25),color,false)
         lash.Material=i>=4 and Enum.Material.Neon or Enum.Material.Metal
-        lash.CFrame=handle.CFrame*CFrame.new(0,2.0,-.6-i*1.8)
+        lash.CFrame=rightHand.CFrame*CFrame.new(1.15+i*1.42,-.8-i*.18,-1.1)
         weld(handle,lash)
     end
     local hum=Instance.new("Humanoid")
     hum.RigType=Enum.HumanoidRigType.R6
     hum.MaxHealth=MAX_HEALTH;hum.Health=MAX_HEALTH;hum.WalkSpeed=10
     hum.JumpPower=0;hum.BreakJointsOnDeath=false
+    hum.HipHeight=7.8
     hum.Parent=model
     local healthGui=Instance.new("BillboardGui")
     healthGui.Name="ColossusHealth"
@@ -728,13 +804,21 @@ local function buildBoss(arena,slot)
     end)
     model.PrimaryPart=root
     model.Parent=folder
-    local spawn=Vector3.new(slot==1 and -113 or 113,9,-620+ (slot==1 and 95 or -95))
-    model:PivotTo(CFrame.lookAt(spawn,Vector3.new(0,9,-620)))
+    local x,z=slot==1 and -113 or 113,-620+(slot==1 and 95 or -95)
+    local params=RaycastParams.new()
+    params.FilterType=Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances={model}
+    params.RespectCanCollide=true
+    local ground=Workspace:Raycast(Vector3.new(x,80,z),Vector3.new(0,-150,0),params)
+    local floorY=(ground and ground.Normal.Y>.65) and ground.Position.Y or .25
+    local spawn=Vector3.new(x,floorY+11.9,z)
+    model:PivotTo(CFrame.lookAt(spawn,Vector3.new(0,spawn.Y,-620)))
     pcall(function()root:SetNetworkOwner(nil)end)
     local boss={model=model,hum=hum,root=root,right=right,left=left,rc0=right.C0,lc0=left.C0,
         rightHip=rightHip,leftHip=leftHip,rootJoint=rootJoint,rootC0=rootJoint.C0,
         color=color,arena=arena,epoch=epoch,attackIndex=slot,active=true,slot=slot,
-        phase=1,revived=false,reviving=false,lastMoves={}}
+        phase=1,revived=false,reviving=false,lastMoves={},lastGroundFix=0}
+    groundBossFeet(boss,1.1)
     currentBoss=boss
     model:GetAttributeChangedSignal("ReviveTrigger"):Connect(function()
         if not boss.reviving and boss.phase==1 and not boss.revived then
@@ -769,6 +853,12 @@ local function buildBoss(arena,slot)
         local turnAt=0
         local nextDelay=4.5
         while isLive(boss) do
+            local clock=os.clock()
+            if not boss.reviving and clock-boss.lastGroundFix>.72 then
+                boss.lastGroundFix=clock
+                if root.Anchored then root.Anchored=false end
+                groundBossFeet(boss,boss.phase==2 and 2.1 or 1.1)
+            end
             local target,dist=nearest(root.Position)
             if boss.reviving or model:GetAttribute("BossInAttack") then
                 hum:Move(Vector3.zero,false)
@@ -808,13 +898,17 @@ local function buildBoss(arena,slot)
                         end
                         table.insert(boss.lastMoves,1,chosen)
                         if #boss.lastMoves>2 then table.remove(boss.lastMoves) end
-                        phaseTwoAttack(boss,chosen,target)
+                        local ok,err=pcall(phaseTwoAttack,boss,chosen,target)
+                        if not ok then warn("[Lashbound Boss] phase two ability failed:",err) end
                     else
                         local chosen=RNG:NextInteger(1,5)
                         if chosen==boss.attackIndex then chosen=chosen%5+1 end
                         boss.attackIndex=chosen
-                        runAttack(boss,chosen,target)
+                        local ok,err=pcall(runAttack,boss,chosen,target)
+                        if not ok then warn("[Lashbound Boss] phase one ability failed:",err) end
                     end
+                    -- Always release the attack lock even after early exit or Lua errors.
+                    if boss.model.Parent and not boss.reviving then finishAttack(boss) end
                 end
             else
                 hum:Move(Vector3.zero,false)
