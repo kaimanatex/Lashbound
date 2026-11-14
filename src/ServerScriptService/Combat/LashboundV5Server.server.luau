@@ -850,10 +850,13 @@ local function lashContacts(player,root,character,dir,reach,step,heavy,maxHits)
         local t=target
         local targetRoot=t.root
         if targetRoot and targetRoot.Parent then
-            local point=targetRoot.Position+Vector3.new(0,math.min(4.2,math.max(1.4,targetRoot.Size.Y*.6)),0)
+            -- Raid hounds are low to the ground: aim at their torso, not above their head.
+            local isHound=t.kind=="Bot" and t.model and t.model:GetAttribute("LashboundDog")==true
+            local point=targetRoot.Position+Vector3.new(0,isHound and .35 or math.min(4.2,math.max(1.4,targetRoot.Size.Y*.6)),0)
             local radial=Vector3.new(point.X-start.X,0,point.Z-start.Z)
             if radial.Magnitude<=reach+5 and math.abs(point.Y-start.Y)<17 then
-                local radius=math.clamp(math.max(targetRoot.Size.X,targetRoot.Size.Z)*.62+1.5,2.4,6.8)
+                -- Include the hound visible body envelope, not only its invisible root.
+                local radius=isHound and 4.0 or math.clamp(math.max(targetRoot.Size.X,targetRoot.Size.Z)*.62+1.5,2.4,6.8)
                 local touched=false
                 local frames=heavy and { .15,.19,.23,.27,.30,.33,.36 } or {.13,.16,.19,.22,.25,.27,.29,.31}
                 local old=nil
