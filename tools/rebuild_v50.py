@@ -13,7 +13,7 @@ ALIASES={"LashboundV31CameraToggle":"LashboundCameraToggle"}
 NEW={"LashboundV37PortalVisuals","V43_CabinInteriorDebrisGuard"}
 
 def main():
-    data=b"\n".join(p.read_bytes() for p in PARTS)
+    data=b"\n".join(p.read_bytes() for p in PARTS)+b"\n"
     digest=hashlib.sha256(data).hexdigest()
     if len(data)!=SIZE or digest!=SHA256:
         raise SystemExit(f"V50 content mismatch: {len(data)} bytes, {digest}")
