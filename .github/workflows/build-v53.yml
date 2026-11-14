@@ -1,0 +1,31 @@
+name: Publish Lashbound V53 Vault Server Fix
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/build_v53.py'
+      - '.github/workflows/build-v53.yml'
+      - 'src/ServerScriptService/Combat/AttackTimeline.module.luau'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore server combat module and prevent stuck Whip Vault
+        run: python3 tools/build_v53.py
+      - name: Attach direct Roblox Studio project
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lashbound_V53_Vault_Server_Fix
+          path: builds/Lashbound_V53_Vault_Server_Fix.rbxlx
+      - name: Commit V53 place file and updated vault client
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add builds/Lashbound_V53_Vault_Server_Fix.rbxlx src/StarterPlayer/StarterPlayerScripts/Combat/LashboundV5Client.client.luau
+          if ! git diff --cached --quiet; then
+            git commit -m 'release: publish V53 vault and combat startup repair'
+            git push
+          fi
