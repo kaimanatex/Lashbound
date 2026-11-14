@@ -420,9 +420,7 @@ local function getReady(g,p)
     g.p2=p;g.mode="pvp";g.notice="Both players ready! Player One goes first."
     broadcast(g)
 end
-local function doBotTurn(g, expectedRound)
-    -- A delayed bot move must never affect a restarted match.
-    if g.round~=expectedRound then return end
+local function doBotTurn(g)
     if g.mode~="bot" or g.turn~=2 or g.winner~=0 then return end
     if g.key=="ConnectFour" then
         local col=fourBotMove(g)
@@ -450,20 +448,18 @@ remote.OnServerEvent:Connect(function(p,key,action,arg)
         if g.key=="ConnectFour" then
             if typeof(arg)=="number" then
                 if fourPlay(g,arg,who) and g.mode=="bot" and g.turn==2 and g.winner==0 then
-                    local expectedRound=g.round
-                    task.delay(.55,function() doBotTurn(g,expectedRound) end)
+                    task.delay(.55,function() doBotTurn(g) end)
                 end
             end
         elseif g.key=="Battleship" then
             if typeof(arg)=="number" then
                 if shipShot(g,who,arg) and g.mode=="bot" and g.turn==2 and g.winner==0 then
-                    local expectedRound=g.round
-                    task.delay(.72,function() doBotTurn(g,expectedRound) end)
+                    task.delay(.72,function() doBotTurn(g) end)
                 end
             end
         elseif isPool(key) then
             if typeof(arg)=="table" and typeof(arg.angle)=="number" and typeof(arg.power)=="number" and
-                arg.angle==arg.angle and arg.power==arg.power and math.abs(arg.angle)<math.huge and math.abs(arg.power)<math.huge and arg.angle>=-360 and arg.angle<=360 and
+                arg.angle==arg.angle and arg.power==arg.power and arg.angle>=-360 and arg.angle<=360 and
                 arg.power>=10 and arg.power<=100 then
                 simulatePool(g,arg.angle,arg.power,who)
             end
@@ -529,8 +525,6 @@ Players.PlayerRemoving:Connect(function(p)
     for _,g in pairs(sessions) do
         if g.p1==p or g.p2==p then
             local remaining=g.p1==p and g.p2 or g.p1
-            g.round=(g.round or 0)+1 -- cancel pending bot moves and pool simulation
-            g.version=(g.version or 0)+1
             g.winner=0;g.mode="idle";g.busy=false;g.p1=nil;g.p2=nil
             g.notice="A player left. Table ready for a new match."
             if g.physical and g.physical.Parent then g.physical:Destroy() end

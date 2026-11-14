@@ -153,6 +153,7 @@ end
 
 feedback.OnClientEvent:Connect(function(kind,_,payload)
     if kind~="Visual" or type(payload)~="table" then return end
+    if payload.kind=="Attack" or payload.kind=="Heavy" then return end
     local box=payload.hitbox
     if type(box)~="table" or typeof(payload.origin)~="Vector3" or not nearby(payload.origin) then return end
     local shape=box.shape

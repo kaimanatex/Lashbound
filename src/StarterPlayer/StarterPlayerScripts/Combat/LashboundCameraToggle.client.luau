@@ -1,5 +1,5 @@
 -- Lashbound V48: shift-style CAMERA LOCK, never a first/third-person switch.
--- V / R3 / on-screen button. Keeps current zoom and camera mode.
+-- V / R3 / on-screen button.  Keeps the player's current zoom and camera mode.
 local Players=game:GetService("Players")
 local UIS=game:GetService("UserInputService")
 local RunService=game:GetService("RunService")
@@ -22,6 +22,7 @@ local function configureCharacter()
     local hum=character and character:FindFirstChildOfClass("Humanoid")
     if hum then
         if locked then
+            -- CameraRelative handles character turning without fighting the Humanoid.
             hum.AutoRotate=true
             hum.CameraOffset=SHOULDER
         else
@@ -42,6 +43,7 @@ local function setLocked(value)
         settings.RotationType=Enum.RotationType.CameraRelative
         if UIS.MouseEnabled then
             UIS.MouseBehavior=Enum.MouseBehavior.LockCenter
+            -- The default Roblox camera script may reset MouseBehavior after a click.
             RunService:BindToRenderStep(renderName,Enum.RenderPriority.Camera.Value+1,function()
                 if locked and not UIS:GetFocusedTextBox() and UIS.MouseBehavior~=Enum.MouseBehavior.LockCenter then
                     UIS.MouseBehavior=Enum.MouseBehavior.LockCenter

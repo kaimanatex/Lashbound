@@ -275,6 +275,8 @@ local comboStage=0
 local comboAt=-100
 local lastPower=0
 local lastDodge=0
+-- Aim at the world point beneath the actual click/tap, not the avatar's facing.
+-- The server receives only a normalized horizontal direction and remains authoritative.
 local lastPointerPosition=nil
 local function aim()
     local char=player.Character
@@ -282,35 +284,38 @@ local function aim()
     local camera=workspace.CurrentCamera
     if not root then return Vector3.new(0,0,-1) end
     if camera then
-        -- First-person is locked to the central crosshair; free camera aims
-        -- at the clicked or tapped world pixel (not the avatar facing vector).
-        local screen
-        if player.CameraMode==Enum.CameraMode.LockFirstPerson or player:GetAttribute("LashboundCameraLocked")==true then
-            screen=camera.ViewportSize*.5
-        elseif lastPointerPosition then
-            screen=lastPointerPosition
-        elseif UIS.MouseEnabled then
-            local m=UIS:GetMouseLocation()
-            screen=Vector2.new(m.X,m.Y)
-        else
-            screen=camera.ViewportSize*.5
+        -- World taps/clicks use their exact pixel ray. HUD and controller attacks
+        -- use the crosshair/center in first person, avoiding the old bottom-right miss.
+        local screen=lastPointerPosition
+        if not screen then
+            if player.CameraMode==Enum.CameraMode.LockFirstPerson or player:GetAttribute("LashboundCameraLocked")==true or not UIS.MouseEnabled then
+                screen=camera.ViewportSize*.5
+            else
+                local m=UIS:GetMouseLocation()
+                screen=Vector2.new(m.X,m.Y)
+            end
         end
-        local ray=camera:ViewportPointToRay(screen.X,screen.Y)
-        local params=RaycastParams.new()
-        params.FilterType=Enum.RaycastFilterType.Exclude
-        params.FilterDescendantsInstances={char}
-        local hit=workspace:Raycast(ray.Origin,ray.Direction*600,params)
-        local target=hit and hit.Position or ray.Origin+ray.Direction*120
-        local delta=target-root.Position
-        local flat=Vector3.new(delta.X,0,delta.Z)
-        if flat.Magnitude>.08 then return flat.Unit end
-        local forward=camera.CFrame.LookVector
-        flat=Vector3.new(forward.X,0,forward.Z)
-        if flat.Magnitude>.08 then return flat.Unit end
+        if screen then
+            local ray=camera:ViewportPointToRay(screen.X,screen.Y)
+            local params=RaycastParams.new()
+            params.FilterType=Enum.RaycastFilterType.Exclude
+            params.FilterDescendantsInstances={char}
+            local hit=workspace:Raycast(ray.Origin,ray.Direction*600,params)
+            local target
+            if hit then
+                target=hit.Position
+            elseif math.abs(ray.Direction.Y)>.001 then
+                local distance=(root.Position.Y-ray.Origin.Y)/ray.Direction.Y
+                if distance>0 then target=ray.Origin+ray.Direction*distance end
+            end
+            if not target then target=ray.Origin+ray.Direction*100 end
+            local delta=Vector3.new(target.X-root.Position.X,0,target.Z-root.Position.Z)
+            if delta.Magnitude>.15 then return delta.Unit end
+        end
     end
-    local forward=root.CFrame.LookVector
-    local flat=Vector3.new(forward.X,0,forward.Z)
-    return flat.Magnitude>.08 and flat.Unit or Vector3.new(0,0,-1)
+    local d=camera and camera.CFrame.LookVector or root.CFrame.LookVector
+    d=Vector3.new(d.X,0,d.Z)
+    return d.Magnitude>.1 and d.Unit or Vector3.new(0,0,-1)
 end
 local function guard()
     if shade.Visible or wheelShade.Visible then return false end
@@ -396,9 +401,11 @@ task.spawn(function()
     end
 end)
 local holdStart=nil
+local attackPointer=nil
 local heavyThreshold=.60
 local chargeSerial=0
-local function pressAttack()
+local function pressAttack(pointer)
+    if pointer then lastPointerPosition=pointer;attackPointer=pointer end
     if holdStart or not guard() then return end
     holdStart=os.clock()
     chargeSerial+=1
@@ -419,9 +426,11 @@ local function pressAttack()
 end
 local function releaseAttack()
     if not holdStart then return end
-    local aimed=aim()
-    lastPointerPosition=nil
     local held=os.clock()-holdStart
+    if attackPointer then lastPointerPosition=attackPointer end
+    local aimed=aim()
+    attackPointer=nil
+    lastPointerPosition=nil
     holdStart=nil;chargeSerial+=1
     attack.Text="WHIP / HOLD HEAVY"
     if not guard() then Action:FireServer("ChargeCancel");return end
@@ -471,7 +480,10 @@ local function useDodge()
     show("DODGE!")
 end
 attack.InputBegan:Connect(function(input)
-    if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then lastPointerPosition=nil;pressAttack() end
+    if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then
+        lastPointerPosition=nil -- HUD button uses camera-centered aim, not its corner.
+        pressAttack()
+    end
 end)
 attack.InputEnded:Connect(function(input)
     if input.UserInputType==Enum.UserInputType.Touch or input.UserInputType==Enum.UserInputType.MouseButton1 then releaseAttack() end
@@ -507,9 +519,12 @@ UIS.InputEnded:Connect(function(input)
 end)
 UIS.InputBegan:Connect(function(input,processed)
     if processed or UIS:GetFocusedTextBox() then return end
-    if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
-        lastPointerPosition=Vector2.new(input.Position.X,input.Position.Y)
-        pressAttack()
+    if input.UserInputType==Enum.UserInputType.MouseButton1 then
+        local pos=UIS:GetMouseLocation()
+        pressAttack(Vector2.new(pos.X,pos.Y))
+    elseif input.UserInputType==Enum.UserInputType.Touch then
+        -- Tapping the 3D world also attacks; processed UI touches are excluded above.
+        pressAttack(Vector2.new(input.Position.X,input.Position.Y))
     end
     if input.KeyCode==Enum.KeyCode.Q then usePower() end
     if input.KeyCode==Enum.KeyCode.B then toggleShop() end
@@ -528,6 +543,8 @@ CAS:BindActionAtPriority("LashboundDodge",function(_,state)
     end
     return Enum.ContextActionResult.Sink
 end,false,Enum.ContextActionPriority.High.Value,Enum.KeyCode.E,Enum.KeyCode.ButtonB)
+-- PlayStation / Xbox gamepad: R2 attack, R1 ability, Circle/B dodge, Triangle/Y shop.
+-- Do not intercept face buttons while a Roblox menu or focused GUI is active.
 CAS:BindActionAtPriority("LashboundControllerPower",function(_,state)
     if state==Enum.UserInputState.Begin and not UIS:GetFocusedTextBox() then usePower() end
     return Enum.ContextActionResult.Sink
@@ -619,7 +636,7 @@ local function localVisual(payload)
     elseif kind=="Power" then playSfx(powerKeys[payload.whipId] or "DashPower",distance)
     else playSfx("Attack"..tostring(payload.step or 1),distance) end
     if kind=="Impact" then
-        playSfx("Hit",distance)
+        -- V12WhipAudio owns confirmed damage sounds; avoid duplicate hits.
         local flash=Instance.new("Part")
         flash.Anchored=true;flash.CanCollide=false;flash.CanTouch=false;flash.CanQuery=false
         flash.Shape=Enum.PartType.Ball;flash.Material=Enum.Material.Neon
@@ -729,7 +746,7 @@ Feedback.OnClientEvent:Connect(function(kind,msg,extra)
     elseif kind=="Zone" then show(msg=="Arena" and "BATTLE START!" or "WELCOME TO THE LOBBY")
     elseif kind=="Hit" then
         show("DIRECT HIT  "..tostring(msg))
-        playSfx("Hit")
+        -- A server-confirmed impact is handled by V12WhipAudio.
         if type(extra)=="table" and typeof(extra.position)=="Vector3" then
             local hitPart=Instance.new("Part")
             hitPart.Anchored=true;hitPart.CanCollide=false;hitPart.CanTouch=false;hitPart.CanQuery=false

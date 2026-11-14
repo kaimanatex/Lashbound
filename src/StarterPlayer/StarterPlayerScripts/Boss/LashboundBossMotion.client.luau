@@ -35,12 +35,12 @@ local function pose(kind,id,t)
     if kind=="attack" then
         local windup=smooth(t/.64)
         release=smooth((t-.68)/.13)
-        recoil=smooth((t-.84)/.16)
+        recoil=smooth((t-.81)/.19)
         attack=math.sin(math.pi*math.clamp(t/.86,0,1))
         handRaise=(ranged and 1.10 or shock and .86 or 1.35)*windup
         twist=direction*(.33*windup-.62*release+.22*recoil)
         crouch=-.17*windup+.10*release
-        stomp=attack*.24+release*.27
+        stomp=attack*.31+release*.34
         roar=attack*(shock and .23 or .13)
     elseif kind=="revive" then
         -- Timeline synced to 5.1-second server revival: knee fall, ascent,

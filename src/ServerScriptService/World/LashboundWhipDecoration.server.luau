@@ -4,8 +4,8 @@
 local Players=game:GetService("Players")
 local Config=require(game:GetService("ReplicatedStorage"):WaitForChild("WhipConfig"))
 local seen=setmetatable({}, {__mode="k"})
-local GLYPH={Rope="R",Ember="F",Frost="I",Volt="V",Gravity="G",Phantom="P",Legend="S",Judgement="J",Echo="M",Owner="✦"}
-local SYMBOL={Rope="◇",Ember="✦",Frost="❄",Volt="ϟ",Gravity="◎",Phantom="☽",Legend="♛",Judgement="ϟ",Echo="◈",Owner="✧"}
+local GLYPH={Rope="R",Ember="F",Frost="I",Volt="V",Gravity="G",Phantom="P",Legend="S",Judgement="J",Echo="M",Mega="X",Owner="✦"}
+local SYMBOL={Rope="◇",Ember="✦",Frost="❄",Volt="ϟ",Gravity="◎",Phantom="☽",Legend="♛",Judgement="ϟ",Echo="◈",Mega="✹",Owner="✧"}
 local function build(tool)
     local id=tool:GetAttribute("WhipId") or (tool.Name=="FounderTempest" and "Owner") or "Rope"
     local cfg=Config.Whips[id]
@@ -89,7 +89,7 @@ local function build(tool)
     particle.Lifetime=NumberRange.new(.42,.8)
     particle.Speed=NumberRange.new(.4,1.2)
     particle.SpreadAngle=Vector2.new(35,35)
-    particle.Rate=id=="Owner" and 10 or id=="Legend" and 7 or 3.5
+    particle.Rate=id=="Owner" and 10 or id=="Mega" and 6 or id=="Legend" and 7 or 3.5
     particle.Enabled=tool.Parent and tool.Parent:IsA("Model") or false
     particle.Parent=attachment
     local light=Instance.new("PointLight")

@@ -459,7 +459,7 @@ task.defer(function()
             if prompt then
                 prompt.Triggered:Connect(function(p)
                     if not closeEnough(p) then return end
-                    RS:WaitForChild("LashboundV5Remotes"):WaitForChild("Feedback"):FireClient(p,"OpenChess")
+                    RS:WaitForChild("LashboundV5Remotes"):WaitForChild("Feedback"):FireClient(p,"OpenChess",1)
                     State:FireClient(p,snapshot(gameState))
                 end)
             end

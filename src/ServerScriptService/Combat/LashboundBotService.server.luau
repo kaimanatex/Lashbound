@@ -178,8 +178,10 @@ local function spawnBot(arena,marker,index)
     hum.Name="Humanoid"
     hum.RigType=Enum.HumanoidRigType.R6
     hum.MaxHealth=95;hum.Health=95;hum.WalkSpeed=14;hum.JumpPower=52
+    -- R6 formula: root height = upper leg Y + root half-height + HipHeight.
+    -- Long shin+boot assembly reaches 3.4 studs below root: 3.6-2.1 = 1.5.
+    hum.HipHeight=1.50
     hum.BreakJointsOnDeath=false
-    hum.HipHeight=1.50 -- R6: actual articulated boot offset minus leg and half root
     hum.Parent=model
     model.PrimaryPart=root
     local markerPos=marker.Position
@@ -188,13 +190,16 @@ local function spawnBot(arena,marker,index)
         folder=Instance.new("Folder");folder.Name="LashboundBots";folder.Parent=arena
     end
     model.Parent=folder
-    local params=RaycastParams.new()
-    params.FilterType=Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances={model}
-    params.RespectCanCollide=true
-    local hit=Workspace:Raycast(markerPos+Vector3.new(0,35,0),Vector3.new(0,-90,0),params)
-    local groundY=(hit and hit.Normal.Y>.65) and hit.Position.Y or markerPos.Y
-    model:PivotTo(CFrame.new(markerPos.X,groundY+3.60,markerPos.Z))
+    -- Place the NPC using the actual arena floor instead of assuming the marker Y
+    -- is the floor height. Keep the R6 root 3 studs above the walking surface.
+    local rayParams=RaycastParams.new()
+    rayParams.FilterType=Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances={model,marker.Parent}
+    local floorHit=Workspace:Raycast(markerPos+Vector3.new(0,48,0),Vector3.new(0,-110,0),rayParams)
+    local floorY=floorHit and floorHit.Position.Y or markerPos.Y
+    model:PivotTo(CFrame.new(markerPos.X,floorY+3.60,markerPos.Z))
+    -- Cache floor for the low-cost grounding watchdog below.
+    model:SetAttribute('SentinelFloorY',floorY)
     local ui=Instance.new("BillboardGui")
     ui.Name="SentinelHealthBar"
     ui.Size=UDim2.fromOffset(145,55);ui.StudsOffsetWorldSpace=Vector3.new(0,3.2,0)
@@ -426,9 +431,37 @@ local function npcDodge(state,target,now,dist)
     return true
 end
 
--- Server publishes coarse movement state only; the V25 client controller
--- animates all Motor6D joints smoothly at render rate. Avoid server C0 gait
--- edits here because they fight locally interpolated elbow/knee movements.
+-- Stand guard against root physics sinking below long, motorized boots.
+-- Run a shallow ground check at most twice/second, never on every animation frame.
+local function preventSunkenSentinel(state,now)
+    if now-state.lastGroundCheck<.48 or not state.root.Parent then return end
+    state.lastGroundCheck=now
+    local rp=RaycastParams.new()
+    rp.FilterType=Enum.RaycastFilterType.Exclude
+    rp.FilterDescendantsInstances={state.model}
+    rp.RespectCanCollide=true
+    local hit=Workspace:Raycast(state.root.Position+Vector3.new(0,7,0),Vector3.new(0,-20,0),rp)
+    if not hit or hit.Normal.Y<.7 then return end
+    local lower=math.huge
+    for _,name in ipairs({'Left Foot','Right Foot'}) do
+        local foot=state.model:FindFirstChild(name)
+        if foot then
+            local cf=foot.CFrame; local half=foot.Size*.5
+            local extent=math.abs(cf.RightVector.Y)*half.X+math.abs(cf.UpVector.Y)*half.Y+math.abs(cf.LookVector.Y)*half.Z
+            lower=math.min(lower,foot.Position.Y-extent)
+        end
+    end
+    if lower==math.huge then return end
+    local error=lower-(hit.Position.Y+.18)
+    local speed=state.root.AssemblyLinearVelocity
+    -- Both directions: lower floating rigs, raise sunken rigs; no pivot-spam.
+    -- Let Humanoid physics settle the correction. Ignore airborne jumps/dodges.
+    if math.abs(error)>.30 and math.abs(error)<4.5 and math.abs(speed.Y)<2
+        and now>=(state.model:GetAttribute("BotDodgeUntil") or 0) then
+        state.hum.HipHeight=math.clamp(state.hum.HipHeight-error*.55,0,5)
+    end
+end
+-- The client runs the 16-joint walking cycle, but server physics owns root height.
 local function animateGait(state,now)
     if not state.model.Parent then return end
     local v=state.root.AssemblyLinearVelocity
@@ -439,36 +472,6 @@ local function animateGait(state,now)
     end
 end
 
-
--- Place animated boots above the arena collision floor without raycasting each frame.
-local function preventSunkenSentinel(state,now)
-    if now-state.lastGroundCheck<.55 then return end
-    state.lastGroundCheck=now
-    local params=RaycastParams.new()
-    params.FilterType=Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances={state.model}
-    params.RespectCanCollide=true
-    local ground=Workspace:Raycast(state.root.Position+Vector3.new(0,15,0),Vector3.new(0,-40,0),params)
-    if not ground or ground.Normal.Y<.7 then return end
-    local lowest=math.huge
-    for _,part in ipairs(state.model:GetDescendants()) do
-        if part:IsA("BasePart") and (part.Name=="Left Foot" or part.Name=="Right Foot") then
-            local half=part.Size*.5
-            local cf=part.CFrame
-            local extent=math.abs(cf.RightVector.Y)*half.X+math.abs(cf.UpVector.Y)*half.Y+math.abs(cf.LookVector.Y)*half.Z
-            lowest=math.min(lowest,part.Position.Y-extent)
-        end
-    end
-    if lowest==math.huge then return end
-    -- Floating and clipping both settle through physics, not repeated PivotTo.
-    local error=lowest-(ground.Position.Y+.18)
-    local vel=state.root.AssemblyLinearVelocity
-    if math.abs(error)>.30 and math.abs(error)<4.5
-        and math.abs(vel.Y)<2
-        and now>=(state.model:GetAttribute("BotDodgeUntil") or 0) then
-        state.hum.HipHeight=math.clamp(state.hum.HipHeight-error*.55,0,5)
-    end
-end
 local function circlePosition(state,target,distance,now)
     local relative=target.root.Position-state.root.Position
     local flat=Vector3.new(relative.X,0,relative.Z)

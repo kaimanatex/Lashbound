@@ -4,7 +4,6 @@
 local Players=game:GetService("Players")
 local RS=game:GetService("ReplicatedStorage")
 local SoundService=game:GetService("SoundService")
-local Workspace=game:GetService("Workspace")
 local Debris=game:GetService("Debris")
 local me=Players.LocalPlayer
 local ids=require(RS:WaitForChild("LashboundSoundIds"))
@@ -18,7 +17,7 @@ local fallback={
   Hit="rbxasset://sounds/impact_generic.mp3",
 }
 local last={}
-local function play(key,volume,speed,origin)
+local function play(key,volume,speed)
     local asset=ids[key]
     local validId=(type(asset)=="number" and asset>0) or (type(asset)=="string" and asset:match("^rbxassetid://%d+$")~=nil)
     local uri=validId and (type(asset)=="number" and "rbxassetid://"..asset or asset) or fallback[key]
@@ -28,35 +27,19 @@ local function play(key,volume,speed,origin)
     s.SoundId=uri
     s.Volume=volume
     s.PlaybackSpeed=speed
-    if typeof(origin)=="Vector3" then
-        local emitter=Instance.new("Part")
-        emitter.Name="LashboundAudioEmitter"
-        emitter.Size=Vector3.new(.1,.1,.1)
-        emitter.Anchored=true
-        emitter.CanCollide=false
-        emitter.CanTouch=false
-        emitter.CanQuery=false
-        emitter.Transparency=1
-        emitter.Position=origin
-        emitter.Parent=Workspace
-        s.RollOffMode=Enum.RollOffMode.InverseTapered
-        s.RollOffMinDistance=8
-        s.RollOffMaxDistance=115
-        s.Parent=emitter
-        Debris:AddItem(emitter,4)
-    else
-        s.Parent=SoundService
-        Debris:AddItem(s,4)
-    end
+    s.Parent=SoundService
     s:Play()
+    Debris:AddItem(s,2)
 end
+-- Explicit hit confirmation comes from the server only after damage succeeds.
+-- The local attacker hears a solid two-layer hit, while spectators hear one
+-- distance-attenuated impact via the replicated Impact visual event.
 feedback.OnClientEvent:Connect(function(kind,_,payload)
     if kind=="Hit" then
-        -- Server only sends this after TakeDamage succeeds.
         local now=os.clock()
         if now-(last.ConfirmedHit or -100)<.095 then return end
         last.ConfirmedHit=now
-        play("Hit",.94,type(payload)=="table" and payload.heavy and .84 or 1+math.random()*.08)
+        play("Hit",.94, type(payload)=="table" and payload.heavy and .84 or 1.00+math.random()*.08)
         task.delay(.045,function()
             if script.Parent then play("Hit",.43,.73) end
         end)
@@ -75,13 +58,12 @@ feedback.OnClientEvent:Connect(function(kind,_,payload)
           or event=="Heavy" and "WhipCrackHeavy"
           or event=="Power" and "WhipCrackPower" or "Hit"
     local now=os.clock()
-    local dedupeKey=tostring(payload.actorUserId or "world")..":"..key
-    if now-(last[dedupeKey] or -20)<.08 then return end
-    last[dedupeKey]=now
+    if now-(last[key] or -20)<.08 then return end
+    last[key]=now
     if event=="Impact" then
-        -- Attacker already hears authoritative Hit; spectators hear 3D impact.
+        -- The striker receives the authoritative Hit notification separately.
         if payload.actorUserId~=me.UserId then
-            play("Hit",.7*factor,.88+math.random()*.16,payload.origin)
+            play("Hit",.7*factor,.88+math.random()*.16)
         end
     else
         -- Sound onset follows the physical whip tip rather than input press.
@@ -91,9 +73,9 @@ feedback.OnClientEvent:Connect(function(kind,_,payload)
         end
         task.delay(delayTime,function()
             if not script.Parent then return end
-            play(key,.9,event=="Attack" and (payload.step==2 and 1.22 or payload.step==3 and .89 or 1.07) or .94,payload.origin)
+            play(key,.9*factor,event=="Attack" and (payload.step==2 and 1.22 or payload.step==3 and .89 or 1.07) or .94)
             if not ((type(ids[key])=="number" and ids[key]>0) or (type(ids[key])=="string" and ids[key]:match("^rbxassetid://%d+$"))) then
-                play("Hit",.22,1.46,payload.origin) -- brief crack transient on fallback
+                play("Hit",.22*factor,1.46) -- brief crack transient on fallback
             end
         end)
     end

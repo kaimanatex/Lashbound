@@ -7,8 +7,6 @@ local RunService=game:GetService("RunService")
 local Tween=game:GetService("TweenService")
 local SoundService=game:GetService("SoundService")
 local Debris=game:GetService("Debris")
-local UserInputService=game:GetService("UserInputService")
-local lowEffects=UserInputService.TouchEnabled
 local player=Players.LocalPlayer
 local Config=require(RS:WaitForChild("WhipConfig"))
 local SoundIds=require(RS:WaitForChild("LashboundSoundIds"))
@@ -62,7 +60,6 @@ local function streak(a,b,color,width,time)
 end
 local function ring(origin,color,radius,lifetime,segments,height)
     segments=segments or 14
-    if lowEffects then segments=math.min(segments,10) end
     height=height or .5
     for i=0,segments-1 do
         local a=math.pi*2*i/segments
@@ -131,7 +128,7 @@ local function whipSwing(payload)
     local power=payload.kind=="Power"
     local heavy=payload.kind=="Heavy"
     local duration=heavy and .9 or power and 1.05 or step==3 and .88 or .78
-    local range=tonumber(payload.range) or (heavy and 33 or power and 27 or step==3 and 25 or 19)
+    local range=(not power and payload.hitbox and tonumber(payload.hitbox.range)) or tonumber(payload.range) or (heavy and 33 or power and 27 or step==3 and 25 or 19)
     local polarity=(step==2) and -1 or 1
     local holder=Instance.new("Folder")
     holder.Name="FlexibleWhipVisual"
@@ -142,7 +139,8 @@ local function whipSwing(payload)
     -- Nearby attacks have 100 independently positioned visual links.  Longer
     -- distances use LOD for multiplayer, while damage is always checked by
     -- the identical 100-segment server geometry.
-    local links=viewerDistance<75 and 100 or viewerDistance<130 and 50 or 25
+    local links=viewerDistance<75 and 36 or viewerDistance<130 and 16 or 8
+    if range>80 then links=math.min(links,24) end
     for i=1,links+1 do
         local node=Instance.new("Part")
         node.Name="CurvePoint"..i
@@ -195,9 +193,7 @@ local function whipSwing(payload)
         end
         -- Curl, physically travel from handle to tip, and snap at the exact
         -- SERVER impact moment. The tip overtakes the thicker base at release.
-        local snapSeconds=typeof(payload.impactServerTime)=="number" and typeof(payload.startedAt)=="number"
-            and math.max(.05,payload.impactServerTime-payload.startedAt)
-            or (heavy and .33 or power and .52 or .29)
+        local snapSeconds=heavy and .33 or power and .52 or .29
         local elapsedTime=elapsed()
         local launch=math.clamp((elapsedTime-.055)/(snapSeconds-.055),0,1)
         local recoil=math.clamp((elapsedTime-(snapSeconds+.075))/.33,0,1)
@@ -213,7 +209,7 @@ local function whipSwing(payload)
             local lift=(1-smooth)*math.sin(f*math.pi)*3.7 + f*.6
             node.CFrame=CFrame.new(base+direction*(extend-coiledBack)+side*sideOffset+Vector3.new(0,lift,0))
         end
-        if not snapped and elapsedTime>=snapSeconds then
+        if power and not snapped and elapsedTime>=snapSeconds then
             snapped=true
             local tip=nodes[#nodes].Position
             orb(tip,1.5,color,.22,6.5,.06)
@@ -226,7 +222,7 @@ local function whipSwing(payload)
             end
             -- Dedicated WhipAudio client owns whip sounds even if this FX script fails.
         end
-        if not rootBurstDone and progress>.12 then
+        if power and not rootBurstDone and progress>.12 then
             rootBurstDone=true
             orb(base,.55,color,.16,2.2,.22)
         end
@@ -391,9 +387,6 @@ local function bossVisual(payload)
     local side=Vector3.new(-dir.Z,0,dir.X)
     local mode=payload.kind
     if mode=="BossTell" then
-        if typeof(payload.impactServerTime)=="number" then
-            payload.duration=math.max(.05,payload.impactServerTime-workspace:GetServerTimeNow())
-        end
         bossWarning(center,step,payload.duration)
         -- Distinct telegraphs: radial shock, cyclone, meteors, hook and lane charge.
         if step==1 then
@@ -419,9 +412,6 @@ local function bossVisual(payload)
             -- Warn both the swept dash corridor and final slam.
         end
     elseif mode=="BossMark" then
-        if typeof(payload.impactServerTime)=="number" then
-            payload.duration=math.max(.05,payload.impactServerTime-workspace:GetServerTimeNow())
-        end
         ring(center,Color3.fromRGB(255,80,78),payload.radius or (step==3 and 10 or 5.5),payload.duration or (step==3 and 1.85 or 1.55),18,.4)
         orb(center+Vector3.new(0,.7,0),1,col,.75,3,.7)
     elseif mode=="BossStrike" then
@@ -469,13 +459,14 @@ Feedback.OnClientEvent:Connect(function(kind,_,payload)
     if typeof(payload.origin)~="Vector3" or typeof(payload.direction)~="Vector3" then return end
     local mode=payload.kind
     if mode=="Attack" or mode=="Power" or mode=="Heavy" then
+        -- Restore the actual animated whip for every strike, without the old fan FX.
         task.spawn(whipSwing,payload)
         if mode=="Power" then
             task.delay(math.max(0,(payload.impactServerTime or (workspace:GetServerTimeNow()+.52))-workspace:GetServerTimeNow()),function()
                 if fx.Parent then abilitySpectacle(payload) end
             end)
         end
-        if mode=="Heavy" and nearby(payload.origin) then
+        if false and mode=="Heavy" and nearby(payload.origin) then
             local at=payload.origin+payload.direction.Unit*15
             ring(at,payload.color,10,.45,14,1.8)
             orb(at+Vector3.new(0,2,0),4,payload.color,.48,12,.48)
