@@ -1,0 +1,34 @@
+name: Assemble Lashbound V48 Studio file
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/StarterPlayer/StarterPlayerScripts/Combat/LashboundCameraToggle.client.luau'
+      - 'src/StarterPlayer/StarterPlayerScripts/Combat/LashboundV5Client.client.luau'
+      - 'src/ServerScriptService/Boss/LashboundBossService.server.luau'
+      - 'src/ServerScriptService/Combat/LashboundBotService.server.luau'
+      - 'tools/build_v48.py'
+      - '.github/workflows/build-v48.yml'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build V48 from prior complete Studio project
+        run: python3 tools/build_v48.py
+      - name: Upload direct Studio project
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lashbound_V48_Studio
+          path: builds/Lashbound_V48_Camera_Lock_Grounded_NPCs.rbxlx
+      - name: Commit direct downloadable rbxlx
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add builds/Lashbound_V48_Camera_Lock_Grounded_NPCs.rbxlx
+          if ! git diff --cached --quiet; then
+            git commit -m 'build: verify and publish V48 Studio file'
+            git push
+          fi
