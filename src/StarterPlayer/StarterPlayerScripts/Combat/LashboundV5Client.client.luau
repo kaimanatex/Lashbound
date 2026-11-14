@@ -285,7 +285,7 @@ local function aim()
         -- First-person is locked to the central crosshair; free camera aims
         -- at the clicked or tapped world pixel (not the avatar facing vector).
         local screen
-        if player.CameraMode==Enum.CameraMode.LockFirstPerson then
+        if player.CameraMode==Enum.CameraMode.LockFirstPerson or player:GetAttribute("LashboundCameraLocked")==true then
             screen=camera.ViewportSize*.5
         elseif lastPointerPosition then
             screen=lastPointerPosition
