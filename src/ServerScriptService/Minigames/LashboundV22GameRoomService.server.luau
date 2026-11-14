@@ -522,6 +522,8 @@ Players.PlayerRemoving:Connect(function(p)
     for _,g in pairs(sessions) do
         if g.p1==p or g.p2==p then
             local remaining=g.p1==p and g.p2 or g.p1
+            g.round=(g.round or 0)+1 -- cancel pending bot moves and pool simulation
+            g.version=(g.version or 0)+1
             g.winner=0;g.mode="idle";g.busy=false;g.p1=nil;g.p2=nil
             g.notice="A player left. Table ready for a new match."
             if remaining and remaining.Parent==Players then send(g,remaining) end
