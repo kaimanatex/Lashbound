@@ -813,12 +813,17 @@ end
 -- granted merely for being inside a camera-facing cone; the modeled lash must
 -- sweep across the target's collision envelope while the hit is active.
 -- All link positions are deterministic functions of the attack timeline.
-local function pointSegmentDistance(point,a,b)
+-- Distance squared avoids a costly square root for every swept hitbox check.
+local function pointSegmentDistanceSquared(point,a,b)
     local delta=b-a
     local len2=delta:Dot(delta)
-    if len2<.0001 then return (point-a).Magnitude end
+    if len2<.0001 then
+        local offset=point-a
+        return offset:Dot(offset)
+    end
     local t=math.clamp((point-a):Dot(delta)/len2,0,1)
-    return (point-(a+delta*t)).Magnitude
+    local offset=point-(a+delta*t)
+    return offset:Dot(offset)
 end
 local function lashPosition(base,dir,range,step,seconds,f,heavy)
     local snap=heavy and .33 or .29
@@ -855,58 +860,72 @@ local function bossContactPoints(model)
     return points
 end
 
+-- One full-fidelity server lash sweep per attack, shared across all victims.
+-- Earlier builds regenerated all 6 x 52-72 curved links for every target.
 local function lashContacts(player,root,character,dir,reach,step,heavy,maxHits)
     local targets=allTargets(player)
     local result={}
+    if #targets==0 then return result end
     local start=root.Position+Vector3.new(0,2.35,0)
     local block=RaycastParams.new()
     block.FilterType=Enum.RaycastFilterType.Exclude
     block.FilterDescendantsInstances={character}
     block.RespectCanCollide=true
-    for _,target in ipairs(targets) do
+    local frames=heavy and {.16,.22,.27,.31,.33,.36} or {.14,.18,.22,.26,.29,.31}
+    local links=reach>140 and 72 or reach>80 and 56 or 52
+    local sweep=nil
+    local function segments()
+        if sweep then return sweep end
+        sweep={}
+        local old=nil
+        for _,clock in ipairs(frames) do
+            local previous=lashPosition(start,dir,reach,step,clock,0,heavy)
+            local current={}
+            for joint=1,links do
+                local at=lashPosition(start,dir,reach,step,clock,joint/links,heavy)
+                sweep[#sweep+1]={a=previous,b=at,prior=old and old[joint] or nil}
+                current[joint]=at
+                previous=at
+            end
+            old=current
+        end
+        return sweep
+    end
+    for _,t in ipairs(targets) do
         if #result>=maxHits then break end
-        local t=target
         local targetRoot=t.root
         if targetRoot and targetRoot.Parent then
-            -- Raid hounds are low to the ground: aim at their torso, not above their head.
             local isHound=t.kind=="Bot" and t.model and t.model:GetAttribute("LashboundDog")==true
             local point=targetRoot.Position+Vector3.new(0,isHound and .35 or math.min(4.2,math.max(1.4,targetRoot.Size.Y*.6)),0)
             local radial=Vector3.new(point.X-start.X,0,point.Z-start.Z)
             local bossPoints=t.kind=="Boss" and t.model and bossContactPoints(t.model) or nil
-            local candidates=bossPoints and #bossPoints>0 and bossPoints or {{position=point,radius=isHound and 4.0 or math.clamp(math.max(targetRoot.Size.X,targetRoot.Size.Z)*.62+1.5,2.4,6.8)}}
             if radial.Magnitude<=reach+18 and (bossPoints or math.abs(point.Y-start.Y)<17) then
-                local touched=false
-                local contactPoint=nil
-                local frames=heavy and { .16,.22,.27,.31,.33,.36 } or {.14,.18,.22,.26,.29,.31}
-                local links=reach>140 and 72 or reach>80 and 56 or 52
-                local old=nil
-                for _,clock in ipairs(frames) do
-                    local base=lashPosition(start,dir,reach,step,clock,0,heavy)
-                    local previous=base
-                    for joint=1,links do
-                        local pointOnLash=lashPosition(start,dir,reach,step,clock,joint/links,heavy)
-                        for _,candidate in ipairs(candidates) do
-                            local cp=candidate.position
-                            if (cp-start).Magnitude<=reach+candidate.radius+5 and
-                                (pointSegmentDistance(cp,previous,pointOnLash)<=candidate.radius
-                                or (old and old[joint] and pointSegmentDistance(cp,old[joint],pointOnLash)<=candidate.radius)) then
-                                touched=true
+                local candidates=bossPoints and #bossPoints>0 and bossPoints or {{position=point,radius=isHound and 4.0 or math.clamp(math.max(targetRoot.Size.X,targetRoot.Size.Z)*.62+1.5,2.4,6.8)}}
+                local eligible={}
+                for _,candidate in ipairs(candidates) do
+                    if (candidate.position-start).Magnitude<=reach+candidate.radius+5 then
+                        eligible[#eligible+1]={pos=candidate.position,radius2=candidate.radius*candidate.radius}
+                    end
+                end
+                if #eligible>0 then
+                    local contactPoint=nil
+                    for _,segment in ipairs(segments()) do
+                        for _,candidate in ipairs(eligible) do
+                            local cp=candidate.pos
+                            if pointSegmentDistanceSquared(cp,segment.a,segment.b)<=candidate.radius2
+                                or (segment.prior and pointSegmentDistanceSquared(cp,segment.prior,segment.b)<=candidate.radius2) then
                                 contactPoint=cp
                                 break
                             end
                         end
-                        if touched then break end
-                        previous=pointOnLash
+                        if contactPoint then break end
                     end
-                    if touched then break end
-                    old=old or {}
-                    for joint=1,links do old[joint]=lashPosition(start,dir,reach,step,clock,joint/links,heavy) end
-                end
-                if touched then
-                    local ray=Workspace:Raycast(start,(contactPoint or point)-start,block)
-                    local victimModel=t.model or (t.player and t.player.Character)
-                    if not ray or (victimModel and ray.Instance:IsDescendantOf(victimModel)) then
-                        table.insert(result,{t=t,dist=radial.Magnitude})
+                    if contactPoint then
+                        local ray=Workspace:Raycast(start,contactPoint-start,block)
+                        local victimModel=t.model or (t.player and t.player.Character)
+                        if not ray or (victimModel and ray.Instance:IsDescendantOf(victimModel)) then
+                            table.insert(result,{t=t,dist=radial.Magnitude})
+                        end
                     end
                 end
             end

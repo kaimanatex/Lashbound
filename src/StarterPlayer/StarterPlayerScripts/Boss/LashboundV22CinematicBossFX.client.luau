@@ -122,7 +122,7 @@ local function connectPoints(a,b,color,life,thick,alpha)
     Debris:AddItem(beam,life+.08)
 end
 local function ring3d(origin,inner,outer,color,life)
-    local slices=20
+    local slices=14 -- exact ring radius, fewer cosmetic ribs
     local low=math.max(0,inner or 0)
     for j=0,slices-1 do
         local a=j*math.pi*2/slices

@@ -142,8 +142,8 @@ local function whipSwing(payload)
     -- Nearby attacks have 100 independently positioned visual links.  Longer
     -- distances use LOD for multiplayer, while damage is always checked by
     -- the identical 100-segment server geometry.
-    local links=viewerDistance<75 and 36 or viewerDistance<130 and 16 or 8
-    if range>80 then links=math.min(links,24) end
+    local links=viewerDistance<75 and 20 or viewerDistance<130 and 10 or 5
+    if range>80 then links=math.min(links,18) end
     for i=1,links+1 do
         local node=Instance.new("Part")
         node.Name="CurvePoint"..i
@@ -231,7 +231,7 @@ local function whipSwing(payload)
             rootBurstDone=true
             orb(base,.55,color,.16,2.2,.22)
         end
-        RunService.RenderStepped:Wait()
+        task.wait(viewerDistance<85 and 1/30 or 1/22)
     end
     if tool and current[tool]==token then
         for _,segment in ipairs(tool:GetChildren()) do

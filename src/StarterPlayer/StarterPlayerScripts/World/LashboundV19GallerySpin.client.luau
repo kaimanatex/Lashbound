@@ -24,7 +24,7 @@ local accum=0
 local phase=0
 RunService.RenderStepped:Connect(function(dt)
     accum+=dt
-    if accum<1/25 then return end
+    if accum<1/16 then return end
     local tick=math.min(accum,.08);accum=0;phase+=tick
     if player:GetAttribute("Zone")~="Lobby" then return end
     for idx,dis in ipairs(displays) do

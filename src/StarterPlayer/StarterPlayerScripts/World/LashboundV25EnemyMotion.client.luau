@@ -152,7 +152,7 @@ local accumulate=0
 RunService.PreSimulation:Connect(function(dt)
     dt=math.min(dt,.075)
     accumulate+=dt
-    if accumulate<1/30 then return end
+    if accumulate<1/24 then return end
     local tick=accumulate;accumulate=0
     local ch=player.Character
     playerRoot=ch and ch:FindFirstChild("HumanoidRootPart")
@@ -163,7 +163,7 @@ RunService.PreSimulation:Connect(function(dt)
             renderables[model]=nil
         else
             local distance=(playerRoot.Position-st.root.Position).Magnitude
-            local budget=distance<95 and (1/30) or distance<175 and .09 or .24
+            local budget=distance<95 and (1/24) or distance<175 and .12 or .28
             if distance<260 and now-st.lastUpdate>=budget then
                 local elapsed=st.lastUpdate>0 and math.clamp(now-st.lastUpdate,.015,.15) or tick
                 st.lastUpdate=now

@@ -106,7 +106,7 @@ local function poseDog(model,s,dt,now,dist)
 end
 RunService.RenderStepped:Connect(function(dt)
     accumulated+=dt
-    if accumulated<1/30 then return end
+    if accumulated<1/20 then return end
     local step=math.min(accumulated,.09)
     accumulated=0
     local char=me.Character
@@ -121,7 +121,7 @@ RunService.RenderStepped:Connect(function(dt)
             local s=findState(dog)
             if s and s.root.Parent then
                 local dist=(view.Position-s.root.Position).Magnitude
-                local interval=dist<120 and 1/30 or dist<200 and .12 or .5
+                local interval=dist<120 and 1/20 or dist<200 and .17 or .55
                 if dist<240 and now-s.updated>=interval then
                     local elapsed=math.min(now-s.updated,.12)
                     s.updated=now
