@@ -201,7 +201,7 @@ local function runAttack(boss,index,target)
     local color=boss.color
     local windup=WINDUP[index]
     prepareAttack(boss,index,dir,windup)
-    visual(boss,"BossTell",origin,dir,color,index,{duration=windup})
+    visual(boss,"BossTell",origin,dir,color,index,{duration=windup,impactServerTime=boss.attackTimeline.impactAt})
     if index==3 then
         -- Ground-targeted meteors snapshot their actual 10-stud impact areas.
         local marked={}
@@ -212,7 +212,7 @@ local function runAttack(boss,index,target)
         end
         if #marked==0 then table.insert(marked,origin+dir*20) end
         for _,where in ipairs(marked) do
-            visual(boss,"BossMark",where,dir,Color3.fromRGB(255,93,65),index,{radius=10,duration=windup})
+            visual(boss,"BossMark",where,dir,Color3.fromRGB(255,93,65),index,{radius=10,duration=windup,impactServerTime=boss.attackTimeline.impactAt})
         end
         if not AttackTimeline.waitUntil(boss.attackTimeline.impactAt,function() return isLive(boss) and not boss.reviving end) then return end
         if not isLive(boss) or boss.reviving then return end
