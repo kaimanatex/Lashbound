@@ -7,6 +7,8 @@ local RunService=game:GetService("RunService")
 local Tween=game:GetService("TweenService")
 local SoundService=game:GetService("SoundService")
 local Debris=game:GetService("Debris")
+local UserInputService=game:GetService("UserInputService")
+local lowEffects=UserInputService.TouchEnabled
 local player=Players.LocalPlayer
 local Config=require(RS:WaitForChild("WhipConfig"))
 local SoundIds=require(RS:WaitForChild("LashboundSoundIds"))
@@ -60,6 +62,7 @@ local function streak(a,b,color,width,time)
 end
 local function ring(origin,color,radius,lifetime,segments,height)
     segments=segments or 14
+    if lowEffects then segments=math.min(segments,10) end
     height=height or .5
     for i=0,segments-1 do
         local a=math.pi*2*i/segments
@@ -192,7 +195,9 @@ local function whipSwing(payload)
         end
         -- Curl, physically travel from handle to tip, and snap at the exact
         -- SERVER impact moment. The tip overtakes the thicker base at release.
-        local snapSeconds=heavy and .33 or power and .37 or .29
+        local snapSeconds=typeof(payload.impactServerTime)=="number" and typeof(payload.startedAt)=="number"
+            and math.max(.05,payload.impactServerTime-payload.startedAt)
+            or (heavy and .33 or power and .37 or .29)
         local elapsedTime=elapsed()
         local launch=math.clamp((elapsedTime-.055)/(snapSeconds-.055),0,1)
         local recoil=math.clamp((elapsedTime-(snapSeconds+.075))/.33,0,1)
@@ -386,6 +391,9 @@ local function bossVisual(payload)
     local side=Vector3.new(-dir.Z,0,dir.X)
     local mode=payload.kind
     if mode=="BossTell" then
+        if typeof(payload.impactServerTime)=="number" then
+            payload.duration=math.max(.05,payload.impactServerTime-workspace:GetServerTimeNow())
+        end
         bossWarning(center,step,payload.duration)
         -- Distinct telegraphs: radial shock, cyclone, meteors, hook and lane charge.
         if step==1 then
@@ -411,6 +419,9 @@ local function bossVisual(payload)
             -- Warn both the swept dash corridor and final slam.
         end
     elseif mode=="BossMark" then
+        if typeof(payload.impactServerTime)=="number" then
+            payload.duration=math.max(.05,payload.impactServerTime-workspace:GetServerTimeNow())
+        end
         ring(center,Color3.fromRGB(255,80,78),payload.radius or (step==3 and 10 or 5.5),payload.duration or (step==3 and 1.85 or 1.55),18,.4)
         orb(center+Vector3.new(0,.7,0),1,col,.75,3,.7)
     elseif mode=="BossStrike" then
