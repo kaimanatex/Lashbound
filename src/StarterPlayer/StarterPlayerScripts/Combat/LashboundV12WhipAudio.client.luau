@@ -28,7 +28,7 @@ local function play(key,volume,speed)
     s.PlaybackSpeed=speed
     s.Parent=SoundService
     s:Play()
-    Debris:AddItem(s,2)
+    Debris:AddItem(s,3)
 end
 feedback.OnClientEvent:Connect(function(kind,_,payload)
     if kind~="Visual" or type(payload)~="table" or typeof(payload.origin)~="Vector3" then return end
@@ -44,8 +44,9 @@ feedback.OnClientEvent:Connect(function(kind,_,payload)
           or event=="Heavy" and "WhipCrackHeavy"
           or event=="Power" and "WhipCrackPower" or "Hit"
     local now=os.clock()
-    if now-(last[key] or -20)<.08 then return end
-    last[key]=now
+    local dedupeKey=tostring(payload.actorUserId or "world")..":"..key
+    if now-(last[dedupeKey] or -20)<.08 then return end
+    last[dedupeKey]=now
     if event=="Impact" then
         play("Hit",.46*factor,1.12)
     else
