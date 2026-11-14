@@ -4,6 +4,7 @@
 local Players=game:GetService("Players")
 local RS=game:GetService("ReplicatedStorage")
 local SoundService=game:GetService("SoundService")
+local Workspace=game:GetService("Workspace")
 local Debris=game:GetService("Debris")
 local me=Players.LocalPlayer
 local ids=require(RS:WaitForChild("LashboundSoundIds"))
@@ -17,7 +18,7 @@ local fallback={
   Hit="rbxasset://sounds/impact_generic.mp3",
 }
 local last={}
-local function play(key,volume,speed)
+local function play(key,volume,speed,origin)
     local asset=ids[key]
     local validId=(type(asset)=="number" and asset>0) or (type(asset)=="string" and asset:match("^rbxassetid://%d+$")~=nil)
     local uri=validId and (type(asset)=="number" and "rbxassetid://"..asset or asset) or fallback[key]
@@ -27,9 +28,27 @@ local function play(key,volume,speed)
     s.SoundId=uri
     s.Volume=volume
     s.PlaybackSpeed=speed
-    s.Parent=SoundService
+    if typeof(origin)=="Vector3" then
+        local emitter=Instance.new("Part")
+        emitter.Name="LashboundAudioEmitter"
+        emitter.Size=Vector3.new(.1,.1,.1)
+        emitter.Anchored=true
+        emitter.CanCollide=false
+        emitter.CanTouch=false
+        emitter.CanQuery=false
+        emitter.Transparency=1
+        emitter.Position=origin
+        emitter.Parent=Workspace
+        s.RollOffMode=Enum.RollOffMode.InverseTapered
+        s.RollOffMinDistance=8
+        s.RollOffMaxDistance=115
+        s.Parent=emitter
+        Debris:AddItem(emitter,4)
+    else
+        s.Parent=SoundService
+        Debris:AddItem(s,4)
+    end
     s:Play()
-    Debris:AddItem(s,3)
 end
 feedback.OnClientEvent:Connect(function(kind,_,payload)
     if kind~="Visual" or type(payload)~="table" or typeof(payload.origin)~="Vector3" then return end
@@ -49,7 +68,7 @@ feedback.OnClientEvent:Connect(function(kind,_,payload)
     if now-(last[dedupeKey] or -20)<.08 then return end
     last[dedupeKey]=now
     if event=="Impact" then
-        play("Hit",.46*factor,1.12)
+        play("Hit",.46,1.12,payload.origin)
     else
         -- Sound onset follows the physical whip tip rather than input press.
         local delayTime=event=="Heavy" and .33 or event=="Power" and .37 or .29
@@ -58,9 +77,9 @@ feedback.OnClientEvent:Connect(function(kind,_,payload)
         end
         task.delay(delayTime,function()
             if not script.Parent then return end
-            play(key,.9*factor,event=="Attack" and (payload.step==2 and 1.22 or payload.step==3 and .89 or 1.07) or .94)
+            play(key,.9,event=="Attack" and (payload.step==2 and 1.22 or payload.step==3 and .89 or 1.07) or .94,payload.origin)
             if not ((type(ids[key])=="number" and ids[key]>0) or (type(ids[key])=="string" and ids[key]:match("^rbxassetid://%d+$"))) then
-                play("Hit",.22*factor,1.46) -- brief crack transient on fallback
+                play("Hit",.22,1.46,payload.origin) -- brief crack transient on fallback
             end
         end)
     end
