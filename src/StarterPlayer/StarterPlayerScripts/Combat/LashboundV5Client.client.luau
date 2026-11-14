@@ -462,6 +462,10 @@ local function toggleShop()
     update()
 end
 shopButton.Activated:Connect(toggleShop)
+CAS:BindActionAtPriority("LashboundControllerShop",function(_,state)
+    if state==Enum.UserInputState.Begin and not UIS:GetFocusedTextBox() then toggleShop() end
+    return Enum.ContextActionResult.Sink
+end,false,Enum.ContextActionPriority.Low.Value,Enum.KeyCode.ButtonY)
 close.Activated:Connect(toggleShop)
 local portalRequest=RS:FindFirstChild("LashboundPortalRequest")
 doorButton.Activated:Connect(function()
@@ -493,6 +497,10 @@ CAS:BindActionAtPriority("LashboundDodge",function(_,state)
     end
     return Enum.ContextActionResult.Sink
 end,false,Enum.ContextActionPriority.High.Value,Enum.KeyCode.E,Enum.KeyCode.ButtonB)
+CAS:BindActionAtPriority("LashboundControllerPower",function(_,state)
+    if state==Enum.UserInputState.Begin and not UIS:GetFocusedTextBox() then usePower() end
+    return Enum.ContextActionResult.Sink
+end,false,Enum.ContextActionPriority.Medium.Value,Enum.KeyCode.ButtonR1)
 local hooked=setmetatable({}, {__mode="k"})
 local function hookTool(child)
     if child:IsA("Tool") and child.Name=="LashboundWhip" and not hooked[child] then

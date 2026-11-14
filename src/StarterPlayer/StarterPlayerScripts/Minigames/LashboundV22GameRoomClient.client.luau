@@ -61,14 +61,14 @@ end
 
 local angle=0;local power=65
 local mapping={ConnectFour="CONNECT FOUR",Battleship="BATTLESHIP",PoolA="POOL TABLE A",PoolB="POOL TABLE B"}
-close.MouseButton1Click:Connect(function()
+close.Activated:Connect(function()
     if current~="" then Request:FireServer(current,"Exit") end
     ui.Enabled=false
 end)
-bot.MouseButton1Click:Connect(function() if current~="" then Request:FireServer(current,"StartBot") end end)
-host.MouseButton1Click:Connect(function() if current~="" then Request:FireServer(current,"HostPvP") end end)
-join.MouseButton1Click:Connect(function() if current~="" then Request:FireServer(current,"Join") end end)
-restart.MouseButton1Click:Connect(function() if current~="" then Request:FireServer(current,"StartBot") end end)
+bot.Activated:Connect(function() if current~="" then Request:FireServer(current,"StartBot") end end)
+host.Activated:Connect(function() if current~="" then Request:FireServer(current,"HostPvP") end end)
+join.Activated:Connect(function() if current~="" then Request:FireServer(current,"Join") end end)
+restart.Activated:Connect(function() if current~="" then Request:FireServer(current,"StartBot") end end)
 local function label(parent,text,sz,pos,color,size)
     return create(parent,"TextLabel",{Text=text,Size=sz,Position=pos or UDim2.new(),BackgroundTransparency=1,
         TextColor3=color or gold,Font=Enum.Font.GothamBold,TextSize=size or 18,TextScaled=false})
@@ -104,7 +104,7 @@ local function addConnectFour()
                 TweenService:Create(ball,TweenInfo.new(.36,Enum.EasingStyle.Bounce,Enum.EasingDirection.Out),{
                     Position=UDim2.fromScale(.5,.5)}):Play()
             end
-            disk.MouseButton1Click:Connect(function()
+            disk.Activated:Connect(function()
                 if clickable() then Request:FireServer(current,"Move",col) end
             end)
         end
@@ -123,7 +123,7 @@ local function miniGrid(parent,originX,text,colorSet,clickableEnemy)
             state==3 and Color3.fromRGB(135,176,183) or Color3.fromRGB(76,116,149)
         local square=create(boardFrame,"TextButton",{Text=state==2 and "X" or state==1 and "·" or "",
             LayoutOrder=i,BackgroundColor3=fill,TextColor3=Color3.new(1,1,1),TextScaled=true,Font=Enum.Font.GothamBold,BorderSizePixel=0})
-        square.MouseButton1Click:Connect(function()
+        square.Activated:Connect(function()
             if clickableEnemy and clickable() and state==0 then Request:FireServer(current,"Move",i) end
         end)
     end
@@ -195,7 +195,7 @@ local function addPool()
     local function ctr(text,x,fn)
         local b=create(ctrl,"TextButton",{Text=text,Size=UDim2.new(.15,-3,.65,0),Position=UDim2.new(x,0,.15,0),
             BackgroundColor3=wood,TextColor3=Color3.new(1,1,1),Font=Enum.Font.GothamBold,TextScaled=true,BorderSizePixel=0})
-        corners(b,6);b.MouseButton1Click:Connect(fn)
+        corners(b,6);b.Activated:Connect(fn)
     end
     ctr("ANGLE -",.01,function() angle=(angle-10)%360;updatePool() end)
     ctr("ANGLE +",.17,function() angle=(angle+10)%360;updatePool() end)
