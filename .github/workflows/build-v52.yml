@@ -1,0 +1,30 @@
+name: Publish Lashbound V52 lag-optimized Studio file
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/build_v52.py'
+      - '.github/workflows/build-v52.yml'
+permissions:
+  contents: write
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preserve V51 scene and optimize hit detection plus visual loops
+        run: python3 tools/build_v52.py
+      - name: Upload direct Roblox Studio file
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lashbound_V52_Optimized_Studio
+          path: builds/Lashbound_V52_Lag_Optimized.rbxlx
+      - name: Publish verified place and matching source scripts
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add builds/Lashbound_V52_Lag_Optimized.rbxlx src/
+          if ! git diff --cached --quiet; then
+            git commit -m 'release: publish optimized Lashbound V52 place'
+            git push
+          fi
