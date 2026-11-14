@@ -62,7 +62,7 @@ local function button(parent,name,text,pos,size,color)
 end
 local top=frame(gui,"Top",UDim2.fromOffset(12,10),UDim2.fromOffset(320,107),bg)
 stroke(top,Color3.fromRGB(60,92,117))
-label(top,"Title","LASHBOUND V17 · WHIP WARS",UDim2.fromOffset(12,7),UDim2.fromOffset(296,27),19,primary)
+label(top,"Title","LASHBOUND V53 · WHIP WARS",UDim2.fromOffset(12,7),UDim2.fromOffset(296,27),19,primary)
 local status=label(top,"Status","LOBBY  •  ENTER THE PORTAL",UDim2.fromOffset(12,36),UDim2.fromOffset(300,23),13,muted)
 local stats=label(top,"Stats","0 COINS  |  0 KOs",UDim2.fromOffset(12,64),UDim2.fromOffset(296,25),15,white)
 local whipBadge=label(top,"WhipBadge","ROOKIE ROPE",UDim2.fromOffset(12,89),UDim2.fromOffset(296,16),13,primary)
@@ -133,6 +133,22 @@ scroller.Parent=shop
 local layout=Instance.new("UIListLayout")
 layout.Padding=UDim.new(0,8); layout.SortOrder=Enum.SortOrder.LayoutOrder; layout.Parent=scroller
 local shopButtons={}
+-- Never leave the Vault on 'Checking...' if the server fails to reply.
+local shopRequestSerial=0
+local shopAwaitingReply=false
+local function requestShop(action,id,message)
+    shopRequestSerial+=1
+    local requestSerial=shopRequestSerial
+    shopAwaitingReply=true
+    shopMessage(message or "Contacting the combat server...",true)
+    Action:FireServer(action,id)
+    task.delay(6,function()
+        if shopAwaitingReply and shopRequestSerial==requestSerial and shade.Visible then
+            shopAwaitingReply=false
+            shopMessage("Combat server did not respond. Check Studio Output for server errors.",false)
+        end
+    end)
+end
 for i,id in ipairs(Config.Order) do
     local cfg=Config.Whips[id]
     local card=frame(scroller,id,UDim2.new(),UDim2.new(1,-10,0,84),panel)
@@ -147,8 +163,7 @@ for i,id in ipairs(Config.Order) do
     buy.TextSize=14; buy.ZIndex=24
     buy.Activated:Connect(function()
         if player:GetAttribute("Zone")=="Arena" then return end
-        shopMessage("Checking "..cfg.Name.." with the server...",true)
-        Action:FireServer("Shop",id)
+        requestShop("Shop",id,"Checking "..cfg.Name.." with the server...")
     end)
     shopButtons[id]=buy
 end
@@ -249,7 +264,7 @@ player:GetAttributeChangedSignal("Zone"):Connect(updateReset)
 player:GetAttributeChangedSignal("WalletSaveStatus"):Connect(function()
     -- Re-query the server after the initial DataStore load if the shop is open.
     if shade.Visible and player:GetAttribute("WalletSaveStatus")~="LOADING" then
-        Action:FireServer("GetShop")
+        requestShop("GetShop",nil,"Refreshing your saved whips...")
     end
 end)
 player:GetAttributeChangedSignal("Zone"):Connect(function()
@@ -484,8 +499,7 @@ local function toggleShop()
     wheelShade.Visible=false
     shade.Visible=not shade.Visible
     if shade.Visible then
-        shopMessage("Checking your saved whips...",true)
-        Action:FireServer("GetShop")
+        requestShop("GetShop",nil,"Checking your saved whips...")
     end
     update()
 end
@@ -671,12 +685,12 @@ Feedback.OnClientEvent:Connect(function(kind,msg,extra)
     if kind=="OpenShop" then
         if player:GetAttribute("Zone")=="Lobby" then
             wheelShade.Visible=false;shade.Visible=true;update()
-            shopMessage("Checking your whips...",true)
-            Action:FireServer("GetShop")
+            requestShop("GetShop",nil,"Checking your whips...")
         end
         return
     end
     if kind=="ShopState" then
+        shopAwaitingReply=false
         if type(extra)=="table" then
             local coins=tonumber(extra.coins) or 0
             local selected=tostring(extra.selected or "Rope")
@@ -692,6 +706,7 @@ Feedback.OnClientEvent:Connect(function(kind,msg,extra)
         return
     end
     if kind=="ShopResult" then
+        shopAwaitingReply=false
         local success=type(extra)=="table" and extra.success==true
         shopMessage(msg,success)
         update()
