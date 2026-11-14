@@ -25,19 +25,21 @@ UIS.InputBegan:Connect(function(input,processed)
     if processed or UIS:GetFocusedTextBox() then return end
     if input.KeyCode==Enum.KeyCode.V or input.KeyCode==Enum.KeyCode.ButtonR3 then toggle() end
 end)
-if UIS.TouchEnabled then
+do
     local gui=Instance.new("ScreenGui")
     gui.Name="LashboundCameraToggleGui"
     gui.ResetOnSpawn=false
+    gui.DisplayOrder=36
     gui.Parent=player:WaitForChild("PlayerGui")
     button=Instance.new("TextButton")
     button.Name="CameraToggle"
     button.Size=UDim2.fromOffset(112,42)
     button.AnchorPoint=Vector2.new(1,1)
-    button.Position=UDim2.new(1,-14,1,-178)
+    button.Position=UDim2.new(1,-14,1,-305)
     button.BackgroundColor3=Color3.fromRGB(25,28,38)
     button.TextColor3=Color3.new(1,1,1)
     button.TextScaled=true
+    button.ZIndex=20
     button.Font=Enum.Font.GothamBold
     button.Parent=gui
     Instance.new("UICorner",button).CornerRadius=UDim.new(0,8)
