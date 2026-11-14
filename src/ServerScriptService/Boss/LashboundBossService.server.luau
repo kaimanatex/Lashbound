@@ -586,6 +586,7 @@ local function groundBossFeet(boss,extra)
     end
     if bottom==math.huge then return end
     local delta=floorY+(extra or .8)-bottom
+    local footSpan=boss.root.Position.Y-bottom -- measure before repositioning
     -- Adjust DOWN for float as well as UP for sink (only at spawn/phase change).
     if math.abs(delta)>.09 and math.abs(delta)<45 then
         boss.model:PivotTo(boss.model:GetPivot()+Vector3.new(0,delta,0))
@@ -594,7 +595,6 @@ local function groundBossFeet(boss,extra)
     if not leg then return end
     -- R6 root height = upper-leg Y + half root Y + HipHeight.
     -- Measure the actual foot offset, not the root's world-space height.
-    local footSpan=boss.root.Position.Y-bottom
     boss.hum.HipHeight=math.clamp(footSpan+.18-leg.Size.Y-boss.root.Size.Y*.5,0,28)
 end
 local function reviveBoss(boss)
